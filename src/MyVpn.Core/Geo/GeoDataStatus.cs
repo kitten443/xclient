@@ -17,10 +17,17 @@ public sealed record GeoDataStatus
     public string AssetDirectory { get; init; } = string.Empty;
 
     /// <summary>
-    /// False when <see cref="AssetDirectory"/> is not rooted. A relative value here is
-    /// the definitive signature of the issue #9765 defect, so it is surfaced as a
-    /// first-class health signal rather than being silently fixed.
+    /// False when <see cref="AssetDirectory"/> is not rooted. A relative value changes meaning
+    /// with the process working directory, so it is surfaced as a first-class health signal
+    /// rather than being silently resolved.
     /// </summary>
+    /// <remarks>
+    /// This is a guard against a different failure mode than issue #9765. For that issue the
+    /// configured value was already absolute but was never delivered to the child process, so
+    /// <c>IsAssetDirectoryAbsolute</c> would have been <c>true</c> throughout. The defences
+    /// against #9765 are the dual-channel environment injection, the pre-launch resolution
+    /// assertion, and the structural content validation — not this flag.
+    /// </remarks>
     public bool IsAssetDirectoryAbsolute { get; init; }
 
     /// <summary>False when updates/repairs cannot be written (read-only AppImage, system path).</summary>

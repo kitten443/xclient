@@ -41,7 +41,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Localization/locales/*.json" />
-    <AvaloniaResource Include="Assets/**" />
   </ItemGroup>
 
 </Project>

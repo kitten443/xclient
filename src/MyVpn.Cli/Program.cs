@@ -1,8 +1,10 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using MyVpn.Core.Diagnostics;
 using MyVpn.Core.Geo;
 using MyVpn.Core.Results;
+using MyVpn.Core.Settings;
+using MyVpn.Infrastructure.Diagnostics;
 using MyVpn.Infrastructure.Geo;
 
 namespace MyVpn.Cli;
@@ -37,7 +39,7 @@ internal static class Program
             {
                 "version" or "--version" or "-v" => PrintVersion(),
                 "geo" => RunGeo(args, loggerFactory),
-                "diagnose" => RunDiagnose(args),
+                "diagnose" => RunDiagnose(args, loggerFactory),
                 _ => Unknown(args[0]),
             };
         }
@@ -58,7 +60,11 @@ internal static class Program
         Console.WriteLine("Usage:");
         Console.WriteLine("  myvpn version                 Show the client version.");
         Console.WriteLine("  myvpn geo doctor [--dir P]    Inspect geo data and report problems.");
-        Console.WriteLine("  myvpn diagnose                Run the built-in connection diagnostics.");
+        Console.WriteLine("  myvpn diagnose [options]      Run the built-in connection diagnostics.");
+        Console.WriteLine("      --dir P       Geo data directory (absolute).");
+        Console.WriteLine("      --core P      Path to the Xray core binary.");
+        Console.WriteLine("      --config P    Path to a generated configuration file.");
+        Console.WriteLine("      --online      Also run checks that need the network.");
         Console.WriteLine("  myvpn help                    Show this help.");
         Console.WriteLine();
         Console.WriteLine("Geo data must be reachable through an ABSOLUTE path; see ADR-0003.");
@@ -165,13 +171,56 @@ internal static class Program
         return 3;
     }
 
-    private static int RunDiagnose(string[] args)
+    private static int RunDiagnose(string[] args, ILoggerFactory loggerFactory)
     {
-        Console.WriteLine("Connection diagnostics");
-        Console.WriteLine("======================");
-        Console.WriteLine("This build wires the diagnostics report through MyVpn.Application.");
-        Console.WriteLine("Run 'myvpn geo doctor' for the geo data subset, which is implemented.");
-        return 0;
+        var stateRoot = StateRoot();
+        var assetDirectory = ReadOption(args, "--dir") ?? Path.Combine(stateRoot, GeoDataConstants.DefaultAssetDirectoryName);
+
+        var geoData = new GeoDataManager(
+            new GeoDataOptions
+            {
+                AssetDirectory = assetDirectory,
+                SeedDirectory = Environment.GetEnvironmentVariable("MYVPN_GEO_SEED"),
+                BackupDirectory = Path.Combine(stateRoot, "geodata-backup"),
+                ManifestPath = Path.Combine(stateRoot, "geodata-manifest.json"),
+            },
+            loggerFactory.CreateLogger<GeoDataManager>());
+
+        var settings = new AppSettings();
+
+        var context = new DiagnosticContext
+        {
+            Settings = settings,
+            GeoData = geoData,
+            CoreBinaryPath = ReadOption(args, "--core"),
+            ConfigPath = ReadOption(args, "--config"),
+            AssetDirectory = assetDirectory,
+            WorkingDirectory = stateRoot,
+
+            // Offline mode: the CLI does not attempt a server connection unless asked, so the
+            // command is safe to run on a machine with no working network.
+            AllowNetworkChecks = args.Contains("--online", StringComparer.OrdinalIgnoreCase),
+        };
+
+        var runner = new DiagnosticRunner(
+            DiagnosticRunner.CreateDefaultChecks(),
+            loggerFactory.CreateLogger<DiagnosticRunner>());
+
+        var report = runner.RunAsync(context, CancellationToken.None).GetAwaiter().GetResult();
+
+        Console.WriteLine(report.ToPlainTextSummary());
+        Console.WriteLine();
+        Console.WriteLine(Format("overall: {0}", report.Overall));
+
+        // Exit codes: 0 healthy, 4 warnings only, 5 errors present. Callers and CI can assert on
+        // these without parsing text.
+        return report.Overall switch
+        {
+            DiagnosticStatus.Success => 0,
+            DiagnosticStatus.Skipped => 0,
+            DiagnosticStatus.Warning => 4,
+            _ => 5,
+        };
     }
 
     private static int Unknown(string arg)

@@ -5,10 +5,12 @@ A cross-platform desktop VPN client built on **Xray-core only**, using Xray's
 Avalonia UI, Clean Architecture + MVVM + dependency injection, a Platform
 Abstraction Layer, and a separate privileged helper service.
 
-> **Status: foundation, not a finished 1.0.** Only the domain layer
-> (`MyVpn.Core`) is implemented, no tests exist yet, and the solution does not
-> currently build end to end. See
-> [Current status](#current-status-honest) before you try anything.
+> **Status: foundation, not a finished 1.0.** The solution builds cleanly, the
+> domain layer and the platform-abstraction contracts are implemented, and a
+> test suite exists — but some tests are currently failing, the integration
+> suite is empty, and the platform executors, IPC transport and real UI wiring
+> are still planned. See [Current status](#current-status-honest) before you
+> rely on anything.
 
 ## What it is
 
@@ -87,35 +89,35 @@ export PATH="$HOME/.dotnet:$PATH"
 dotnet --version          # expect 8.0.x
 ```
 
-Restore and build:
+Restore and build the whole solution:
 
 ```bash
 dotnet restore MyVpn.sln
 dotnet build MyVpn.sln -c Release --no-restore
 ```
 
-> **Known gap:** the command above currently **fails**. `MyVpn.Service`,
-> `MyVpn.Cli` and `MyVpn.UI` declare `OutputType` `Exe`/`WinExe` and have no
-> entry point, so the compiler reports three `CS5001` errors. To build what
-> exists today, build the library and test projects, which do not reference
-> those three shells:
->
-> ```bash
-> for p in src/MyVpn.Core src/MyVpn.Application src/MyVpn.Infrastructure \
->          src/MyVpn.Platform.Abstractions src/MyVpn.Platform.Linux \
->          src/MyVpn.Platform.Windows src/MyVpn.Platform.MacOS src/MyVpn.Ipc \
->          tests/MyVpn.Core.Tests tests/MyVpn.Infrastructure.Tests \
->          tests/MyVpn.Platform.Tests tests/MyVpn.Integration.Tests; do
->   dotnet build "$p" -c Release --no-restore
-> done
-> ```
+The build is a real gate: `Directory.Build.props` sets
+`TreatWarningsAsErrors=true` and `EnableNETAnalyzers=true`, so a green build
+means zero warnings and zero analyzer diagnostics as well as zero errors.
 
-Test. The four test projects are configured but contain no tests yet, so
-`dotnet test` reports "No test is available" and exits 0:
+Test. The suite exists and runs; **9 of the 696 `MyVpn.Core.Tests` cases
+currently fail**, so this is expected to be red:
 
 ```bash
-dotnet test tests/MyVpn.Core.Tests -c Release --no-build
+dotnet test MyVpn.sln -c Release --no-build --collect:"XPlat Code Coverage"
 ```
+
+Known failures at the last verification (all in `tests/MyVpn.Core.Tests`, and
+all genuine disagreements between the tests and the implementation rather than
+flakiness): `GeoAssetValidatorTests` (4 cases — including one expecting failure
+code `truncated_entry` where the validator returns `malformed_entry`),
+`ProtoReaderTests.Reads_a_single_byte_varint`, `CidrBlockTests.Parses_a_bracketed_ipv6_literal`,
+`ServerScoreTests.Score_is_always_within_zero_and_one_hundred`,
+`UrlSafetyTests.A_relative_url_is_rejected`, and
+`RawHeaderBagTests.Rejected_headers_record_the_reason_and_length`.
+
+`tests/MyVpn.Integration.Tests` is configured but contains no tests yet, so that
+leg passes vacuously (`dotnet test` reports "No test is available" and exits 0).
 
 Privileged tests (real TUN, real firewall, real routes) are expected to carry the
 xunit trait `Category = "RequiresRoot"`. On Linux CI the pipeline filters them
@@ -138,7 +140,7 @@ never been formatted; it becomes a merge gate once the baseline is clean.
 
 Verified by inspecting the source tree and building it.
 
-**Implemented — `MyVpn.Core` only:**
+**Implemented:**
 
 * `Result` / `Result<T>` / `MyVpnError` / `ErrorCodes` (stable, never-localized
   codes).
@@ -158,27 +160,74 @@ Verified by inspecting the source tree and building it.
 * Share-link parsing, tolerant Base64, country inference, `CidrBlock`,
   `UrlSafety` (https-only, no credentials, SSRF refusal), and the Xray version
   policy.
+* `MyVpn.Core.Configuration`: the typed Xray configuration model and
+  `XrayConfigBuilder`. Emits only the **documented** TUN fields (`name`, `desc`,
+  `mtu`, `gateway`, `dns`, `userLevel`, `autoSystemRoutingTable`,
+  `autoOutboundsInterface`) and never `address`/`autoRoute`/`strictRoute`/
+  `sniffingOverride`; routes port 53 to a `dns` outbound (there is no DNS
+  *inbound* protocol); applies the `mark` sockopt to the proxy outbound only;
+  models `xudpProxyUDP443` as the tri-state it actually is; and **omits any
+  `geoip:`/`geosite:` rule whose asset is unusable** so a damaged geo database
+  degrades routing policy instead of preventing the connection.
+* `MyVpn.Infrastructure`: `GeoDataManager` (manifest, status, atomic
+  stage→verify→validate→backup→rename install, rollback, repair, and the
+  dual-channel environment injection) and `XrayAssetResolution` (a mirror of
+  Xray's asset lookup order, used as a pre-launch assertion).
+* `MyVpn.Infrastructure`: `XrayEngineManager` plus its support types —
+  `XrayBinaryLocator` (search order, executable-bit check),
+  `XrayTestRunInterpreter` (exit code 23 = configuration rejected ⇒ **do not
+  restart**), `RestartLimiter` (sliding-window restart budget) and the engine
+  itself: argv launch, explicit environment, `xray run -test` pre-flight,
+  version probe, stdout/stderr capture with a bounded buffer, `SIGTERM` graceful
+  stop, crash classification and bounded automatic restart.
+* `MyVpn.Infrastructure.Diagnostics`: `DiagnosticRunner` (per-check isolation,
+  injectable timeout, aggregate report) and nine checks covering core binary,
+  configuration file, geo data, core process/version, TUN interface, kill
+  switch, DNS, system proxy and server reachability. Every result carries a
+  localization key, never a raw English sentence.
+* `MyVpn.Platform.Abstractions`: the capability interfaces (`IKillSwitch`,
+  `IRouteManager`, `IDnsConfigurator`, `IProcessRouter`, `ISystemProxy`,
+  `IPrivilegedHost`, `ITunDeviceManager`, `INetworkStateManager`,
+  `IPlatformServices`), their plan/state value objects, the platform capability
+  matrix types, and `KillSwitchPlanBuilder`.
+* `MyVpn.Platform.Linux`: `NftablesKillSwitchRenderer` (a pure renderer whose
+  output is verified by installing it into a throwaway kernel network namespace
+  in the test suite).
+* Working `MyVpn.Cli` commands: `myvpn geo doctor` and `myvpn diagnose` (with
+  meaningful exit codes: 3 = geo data unusable, 4 = warnings, 5 = errors).
+* Entry points for `MyVpn.UI` (Avalonia `App`/`MainWindow`, a
+  `MainWindowViewModel` and a JSON localization service with `en`/`ru`/`zh-Hans`
+  locales, 196 keys each) and `MyVpn.Service` (privilege and capability
+  pre-flight).
+* A test suite: 695 cases in `MyVpn.Core.Tests`, 66 in
+  `MyVpn.Infrastructure.Tests`, 15 in `MyVpn.Platform.Tests`.
 
-**Planned — everything else:**
+**Planned:**
 
-* Xray binary location/probe, config generation, `xray run -test` pre-flight,
-  process supervision, bounded log pump.
-* Geo-data manager, downloader, manifest, atomic install/rollback, launch-time
-  environment injection.
-* Platform executors: kill switch, routes, DNS, process routing, system proxy.
-* Privileged service and the authenticated IPC contract.
-* The Avalonia UI (view models, views, localization, theming) and the CLI.
-* **Every automated test.** All four test projects are `.csproj`-only.
+* Geo-data **download** (fetching from a source with SHA-256 from a signed
+  manifest). Atomic install/rollback/repair exist; the network fetch does not.
+* Platform **executors** (as opposed to contracts/renderers): kill switch, route
+  management, DNS configuration, process routing and system proxy for Windows,
+  Linux and macOS; only the Linux nftables renderer exists so far.
+* The authenticated IPC transport in `MyVpn.Ipc` and the real privileged
+  service implementation behind it.
+* The `MyVpn.Application` use cases (connect/disconnect/import/diagnostics
+  orchestration) wiring the Core services together.
+* The real UI: DI composition, remaining view models/views, theme service,
+  settings persistence and OS-keystore secret storage.
+* Integration tests (`tests/MyVpn.Integration.Tests` is empty).
 * Installers, bundling, code signing and artifact provenance.
 
 **Known inaccuracies in the current tree** (details in
 [`docs/architecture/overview.md`](docs/architecture/overview.md#known-gaps-and-inaccuracies-in-the-current-tree)):
 
-* The solution does not build (three missing entry points).
-* No tests exist.
+* **9 of 696 `MyVpn.Core.Tests` cases fail**, so `dotnet test` is red. They are
+  genuine test/implementation disagreements (see the build section above).
+* `tests/MyVpn.Integration.Tests` contains no tests, so its CI leg passes
+  vacuously.
 * Some `.csproj` comments describe planned behaviour in the present tense.
-* `MyVpn.UI.csproj` references `app.manifest`, `Localization/locales/*.json` and
-  `Assets/**`, none of which exist yet.
+* `MyVpn.UI.csproj` still references `Assets/**`, which does not exist yet
+  (`app.manifest` and `Localization/locales/*.json` now do).
 * `GeoDataStatus` still calls a relative asset path "the definitive signature of
   the issue #9765 defect", which contradicts the verified root cause — the value
   was absolute and was never delivered to the elevated process.

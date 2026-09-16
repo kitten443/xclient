@@ -4,6 +4,19 @@ using MyVpn.Core.Results;
 
 namespace MyVpn.Core.Settings;
 
+/// <summary>How UDP/443 (QUIC) is handled by XUDP. Mirrors Xray's tri-state field.</summary>
+public enum XudpUdp443Handling
+{
+    /// <summary>Do not transport QUIC over XUDP; the client falls back to TCP.</summary>
+    Reject = 0,
+
+    /// <summary>Transport QUIC over XUDP.</summary>
+    Allow = 1,
+
+    /// <summary>Leave UDP/443 to the ordinary UDP path.</summary>
+    Skip = 2,
+}
+
 /// <summary>Log verbosity exposed to the user.</summary>
 public enum LogVerbosity
 {
@@ -558,8 +571,15 @@ public sealed record MuxSettings
     /// <summary>XUDP concurrency; <c>-1</c> disables XUDP multiplexing.</summary>
     public int XudpConcurrency { get; init; } = 8;
 
-    /// <summary>Proxy UDP/443 through XUDP (QUIC handling).</summary>
-    public bool XudpProxyUdp443 { get; init; } = true;
+    /// <summary>
+    /// How UDP/443 (QUIC) is treated when XUDP multiplexing is active.
+    /// </summary>
+    /// <remarks>
+    /// Modelled as a tri-state rather than a boolean because Xray's corresponding field is the
+    /// string <c>"reject" | "allow" | "skip"</c>. A boolean cannot express <c>skip</c>, and
+    /// collapsing it into one of the other two would silently change QUIC behaviour.
+    /// </remarks>
+    public XudpUdp443Handling XudpProxyUdp443 { get; init; } = XudpUdp443Handling.Reject;
 
     public IEnumerable<MyVpnError> Validate()
     {

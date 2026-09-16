@@ -95,19 +95,19 @@ presence** is stated per project because it varies.
 |---|---|---|---|
 | `MyVpn.Core` | Domain model, value objects, the VPN state machine, the settings/configuration model, pure validators and parsers. Zero package references. | — | **Present** (`Core/`) — see the file inventory below |
 | `MyVpn.Application` | Ports (capability interfaces) and use cases: connect, disconnect, switch profile, update subscriptions, update geo data, run diagnostics. | Core, logging abstractions | **None** — `.csproj` only |
-| `MyVpn.Infrastructure` | Xray process engine, config generation, geo-data management, subscription download/parsing, settings persistence, logging, updates, diagnostics. | Core, Application, Platform.Abstractions | **None** — `.csproj` only |
-| `MyVpn.Platform.Abstractions` | Capability interfaces plus pure plan renderers (nftables / WFP / PF). | Core | **None** — `.csproj` only |
-| `MyVpn.Platform.Linux` | Linux executors: nftables, netlink/`ip` routing, `systemd-resolved`/`resolvconf` DNS, cgroup v2, system proxy, D-Bus helper client. | Core, Platform.Abstractions | **None** — `.csproj` only |
+| `MyVpn.Infrastructure` | Xray process engine, config generation, geo-data management, subscription download/parsing, settings persistence, logging, updates, diagnostics. | Core, Application, Platform.Abstractions | **Partial** — `GeoDataManager`, `XrayAssetResolution` |
+| `MyVpn.Platform.Abstractions` | Capability interfaces plus pure plan renderers (nftables / WFP / PF). | Core | **Partial** — all capability interfaces, plan/state records, the capability matrix types and `KillSwitchPlanBuilder`; no renderers for Windows/macOS yet |
+| `MyVpn.Platform.Linux` | Linux executors: nftables, netlink/`ip` routing, `systemd-resolved`/`resolvconf` DNS, cgroup v2, system proxy, D-Bus helper client. | Core, Platform.Abstractions | **Partial** — `NftablesKillSwitchRenderer` (pure renderer) only; no executors |
 | `MyVpn.Platform.Windows` | Windows executors: WFP via `fwpuclnt.dll`, NetIO routing, `SetInterfaceDnsSettings`/NRPT, Wintun adapter recovery, WinINET/WinHTTP proxy, named-pipe client. | Core, Platform.Abstractions | **None** — `.csproj` only |
 | `MyVpn.Platform.MacOS` | macOS executors: PF anchors, `PF_ROUTE`/`route`, `scutil`/`/etc/resolver`, utun lifecycle, XPC helper client, `networksetup` proxy. | Core, Platform.Abstractions | **None** — `.csproj` only |
 | `MyVpn.Ipc` | Typed request/response contract plus the authenticated transport (Unix socket / named pipe) and peer-credential verification. | Core | **None** — `.csproj` only |
-| `MyVpn.Service` | Privileged host: TUN lifecycle, routes, firewall/kill switch, DNS, process routing, Xray supervision. No "run this command" or "apply raw config" operation. | Core, Application, Infrastructure, Platform.Abstractions, all platform projects, Ipc | **None** — `.csproj` only, **and no entry point** |
-| `MyVpn.Cli` | Headless driver: integration testing of the real pipeline, `diagnose`, power-user use. Exercises the same application services as the GUI. | Core, Application, Infrastructure, Platform.Abstractions, all platform projects, Ipc | **None** — `.csproj` only, **and no entry point** |
-| `MyVpn.UI` | Avalonia desktop shell, MVVM, DI, theming and localization. Never touches the firewall, routes, DNS, the Xray process or any privileged API. | Core, Application, Infrastructure, Platform.Abstractions, Ipc | **None** — `.csproj` only, **and no entry point** |
-| `tests/MyVpn.Core.Tests` | Unit tests for Core. | Core | **None** — `.csproj` only |
-| `tests/MyVpn.Infrastructure.Tests` | Tests for the infrastructure adapters. | Core, Application, Infrastructure | **None** — `.csproj` only |
-| `tests/MyVpn.Platform.Tests` | Tests for the pure platform renderers. | Core, Platform.Abstractions, all platform projects | **None** — `.csproj` only |
-| `tests/MyVpn.Integration.Tests` | End-to-end pipeline tests that may spawn processes; privileged cases are marked `Category = "RequiresRoot"`. | Core, Application, Infrastructure, Ipc | **None** — `.csproj` only |
+| `MyVpn.Service` | Privileged host: TUN lifecycle, routes, firewall/kill switch, DNS, process routing, Xray supervision. No "run this command" or "apply raw config" operation. | Core, Application, Infrastructure, Platform.Abstractions, all platform projects, Ipc | **Skeleton** — `Program.cs` entry point only; the privileged work is planned |
+| `MyVpn.Cli` | Headless driver: integration testing of the real pipeline, `diagnose`, power-user use. Exercises the same application services as the GUI. | Core, Application, Infrastructure, Platform.Abstractions, all platform projects, Ipc | **Skeleton** — `Program.cs` entry point only |
+| `MyVpn.UI` | Avalonia desktop shell, MVVM, DI, theming and localization. Never touches the firewall, routes, DNS, the Xray process or any privileged API. | Core, Application, Infrastructure, Platform.Abstractions, Ipc | **Skeleton** — `App`/`MainWindow`, a `MainWindowViewModel`, a JSON localization service and `en`/`ru`/`zh-Hans` locales; no DI composition, theme service or settings persistence |
+| `tests/MyVpn.Core.Tests` | Unit tests for Core. | Core | **Present** — ~696 cases; **9 currently failing** |
+| `tests/MyVpn.Infrastructure.Tests` | Tests for the infrastructure adapters. | Core, Application, Infrastructure | **Partial** — 24 cases (`GeoDataManagerTests`) |
+| `tests/MyVpn.Platform.Tests` | Tests for the pure platform renderers. | Core, Platform.Abstractions, all platform projects | **Partial** — 15 cases (`NftablesKillSwitchRendererTests`) |
+| `tests/MyVpn.Integration.Tests` | End-to-end pipeline tests that may spawn processes; privileged cases are marked `Category = "RequiresRoot"`. | Core, Application, Infrastructure, Ipc | **None** — no tests yet |
 
 ### What is actually implemented inside `MyVpn.Core`
 
@@ -260,43 +260,50 @@ inspecting the tree and by building it.
 | `subscription-userinfo` parsing | **Implemented** | Tolerant of `;`/`,`, floats, ms-vs-s epochs |
 | Share-link parsing (`vless`/`vmess`/`trojan`/`ss`) | **Implemented** | `MyVpn.Core/Parsing/ShareLinkParser.cs` |
 | Geo-asset structural validation (protobuf walk) | **Implemented** | `MyVpn.Core/Geo/GeoAssetValidator.cs` |
-| Geo-data manager, download, manifest, atomic install | **Planned** | ADR-0003 |
+| Geo-data manager (manifest, status, options) | **Partial** | `MyVpn.Infrastructure/Geo/GeoDataManager.cs`; download, SHA-256 verification and atomic install/rollback are planned (ADR-0003) |
+| Xray asset-resolution mirror | **Implemented** | `MyVpn.Infrastructure/Geo/XrayAssetResolution.cs`; the pre-launch assertion that consumes it is planned |
 | Xray version policy + parser | **Implemented** | `MyVpn.Core/Xray/XrayVersion.cs` |
 | Xray binary locator/probe, config generator, `-test` pre-flight | **Planned** | ADR-0002 |
 | Xray process supervision, restart policy, bounded log pump | **Planned** | `ErrorCodes` for it already exist |
 | CIDR and URL-safety primitives | **Implemented** | `MyVpn.Core/Net/` |
-| Platform capability interfaces + pure renderers | **Planned** | only `.csproj` comments so far |
+| Platform capability interfaces + plan/state types | **Implemented** | `MyVpn.Platform.Abstractions/` (`IKillSwitch`, `IRouteManager`, `IDnsConfigurator`, `IProcessRouter`, `ISystemProxy`, `IPrivilegedHost`, `ITunDeviceManager`, `INetworkStateManager`, `IPlatformServices`, plus `KillSwitchPlanBuilder` and the capability-matrix types) |
+| Pure platform renderers | **Partial** | `MyVpn.Platform.Linux/KillSwitch/NftablesKillSwitchRenderer.cs` exists and is tested; no WFP or PF renderer yet |
 | Kill switch per platform | **Planned** | ADR-0006 |
-| Privileged service + authenticated IPC | **Planned** | ADR-0005; only `.csproj` |
-| Per-process routing | **Planned** | ADR-0007; capability matrix not yet implemented |
+| Privileged service + authenticated IPC | **Skeleton** | `MyVpn.Service/Program.cs` exists; the privileged work and the `MyVpn.Ipc` transport are planned (ADR-0005) |
+| Per-process routing | **Contracts only** | `IProcessRouter`, `ProcessRoutingCapability`, `ProcessRoutingPlan` exist in `MyVpn.Platform.Abstractions`; no executor (ADR-0007) |
 | Transport/NAT strategy selection | **Planned** | ADR-0011; `TransportStrategy`/`MuxSettings` exist as settings only |
-| UI (views, view models, localizer, theme service) | **Planned** | ADR-0010 |
-| CLI (`diagnose`, `check-config`, …) | **Planned** | no entry point |
-| Any automated test | **Planned** | all four test projects are `.csproj`-only; `dotnet test` reports "No test is available" |
-| Whole-solution build | **Broken today** | `MyVpn.Service`, `MyVpn.Cli` and `MyVpn.UI` have no `Main`, so `dotnet build MyVpn.sln` fails with three `CS5001` errors. The CI workflow documents this as a tracked gap and builds the existing graph instead. |
-| Geo asset + Xray bundling, installers, signing | **Planned** | CI packaging is gated on the entry points existing |
+| UI (shell, view model, localizer) | **Partial** | `App`/`MainWindow`, `MainWindowViewModel` and a JSON `LocalizationService` with `en`/`ru`/`zh-Hans`; DI composition, theming, settings persistence and OS-keystore secrets are planned (ADR-0010) |
+| CLI (`diagnose`, `check-config`, …) | **Skeleton** | `MyVpn.Cli/Program.cs` exists; the commands are planned |
+| Automated tests | **Partial** | `MyVpn.Core.Tests` ~696 cases (**9 failing**), `MyVpn.Infrastructure.Tests` 24, `MyVpn.Platform.Tests` 15; `MyVpn.Integration.Tests` is empty |
+| Whole-solution build | **Working** | `dotnet build MyVpn.sln -c Release` succeeds with 0 warnings and 0 errors (verified 2026-09-16). |
+| Geo asset + Xray bundling, installers, signing | **Planned** | The CI packaging job publishes and packages once the entry points exist, which they now do; the WiX/nfpm/AppImage authoring files and signing secrets are not yet in place. |
 
 ## Known gaps and inaccuracies in the current tree
 
-Recorded here because they affect anyone reading the code or the docs:
+Recorded here because they affect anyone reading the code or the docs. This
+section was verified by building and testing the tree on **2026-09-16**; the tree
+is under active development, so re-verify before relying on any line.
 
-1. **The solution does not build.** Three entry-point projects
-   (`MyVpn.Service`, `MyVpn.Cli`, `MyVpn.UI`) are shells with `OutputType`
-   `Exe`/`WinExe` and no `Program.cs`, producing `CS5001`. This is the blocking
-   gap for CI, packaging and running anything at all.
-2. **No tests exist**, despite every test project being configured and
-   `Directory.Build.props` treating warnings as errors. The rich `MyVpn.Core`
-   implementation is entirely untested.
+1. **Nine tests in `MyVpn.Core.Tests` fail** (of ~696), so `dotnet test` is red.
+   They are genuine disagreements between the newly written tests and the
+   implementation, not flakiness: four `GeoAssetValidatorTests` cases (one
+   expects failure code `truncated_entry` where the validator returns
+   `malformed_entry`), `ProtoReaderTests.Reads_a_single_byte_varint`,
+   `CidrBlockTests.Parses_a_bracketed_ipv6_literal`,
+   `ServerScoreTests.Score_is_always_within_zero_and_one_hundred`,
+   `UrlSafetyTests.A_relative_url_is_rejected` and
+   `RawHeaderBagTests.Rejected_headers_record_the_reason_and_length`.
+2. **`tests/MyVpn.Integration.Tests` contains no tests**, so that CI leg passes
+   vacuously. The privileged test tier described in the research reports does
+   not exist yet.
 3. **Several `.csproj` comments describe planned behaviour in the present
    tense** — for example `MyVpn.Ipc.csproj` states that "the transport binds to
-   a Unix domain socket … and performs peer-credential verification", and
-   `MyVpn.Platform.Abstractions.csproj` enumerates capability interfaces that do
-   not exist. The comments are a design statement, not a description of the
-   code; ADR-0005 and ADR-0007 are the authoritative records.
-4. **`MyVpn.UI.csproj` references files that do not exist** — `app.manifest`,
-   `Localization/locales/*.json` and `Assets/**`. Globs match nothing today, so
-   the compile is unaffected, but a Windows publish will need `app.manifest`, and
-   the localizer will need at least one locale file (ADR-0010).
+   a Unix domain socket … and performs peer-credential verification". The
+   comments are a design statement, not a description of the code; ADR-0005 is
+   the authoritative record.
+4. **`MyVpn.UI.csproj` still references `Assets/**`, which does not exist.**
+   The glob matches nothing so the compile is unaffected, but the resource set
+   is incomplete. (`app.manifest` and `Localization/locales/*.json` now exist.)
 5. **`GeoDataStatus` still describes a relative asset directory as "the
    definitive signature of the issue #9765 defect"**, which contradicts the
    verified root cause: the configured value was absolute and was simply never
@@ -319,6 +326,12 @@ Recorded here because they affect anyone reading the code or the docs:
    `08-macos-networking.md` has a duplicated heading and a section explicitly
    marked incomplete. The reports are evidence archives; treat their structure as
    provisional.
+10. **`docs/research/02-issue-9765-geodata.md` §1.9 is itself out of date.** It
+    asserts that `GeoAssetInfo.cs` contains a comment claiming a relative path
+    was the root cause and asks for it to be corrected; that correction has
+    already been applied, and the file now documents the verified cause. The
+    remaining stale wording is in `GeoDataStatus` (item 5 above), which the
+    report does not mention.
 
 ## References
 

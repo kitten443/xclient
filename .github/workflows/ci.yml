@@ -543,7 +543,7 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Packaging skipped for ${{ matrix.rid }}: the UI/service/CLI entry points are not implemented yet. See README.md 'Implemented vs planned' and the KNOWN GAPS comment at the top of this workflow."
+            echo "::notice::Packaging skipped for ${{ matrix.rid }}: a head-project entry point (src/MyVpn.UI/Program.cs, src/MyVpn.Service/Program.cs or src/MyVpn.Cli/Program.cs) is missing. See README.md 'Current status (honest)'."
           fi
 
       # ---- publish ----------------------------------------------------------
