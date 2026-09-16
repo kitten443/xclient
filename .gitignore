@@ -1,0 +1,40 @@
+# Build output
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+*.userprefs
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+*.sln.iml
+
+# Test / coverage
+TestResults/
+coverage*.xml
+coverage*.json
+*.trx
+
+# Local runtime state that must never be committed
+# (contains subscription URLs, credentials, tokens)
+.state/
+*.secret
+ipc-token
+*.token
+
+# Xray runtime artifacts
+xray-core/
+geoip.dat
+geosite.dat
+*.dat.tmp
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# NuGet
+*.nupkg
+packages/

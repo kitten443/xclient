@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>MyVpn.Platform.Windows</RootNamespace>
+    <AssemblyName>MyVpn.Platform.Windows</AssemblyName>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

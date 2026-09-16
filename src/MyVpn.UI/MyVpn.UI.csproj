@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MyVpn.UI — the Avalonia desktop shell.
+
+    The UI never touches the firewall, routes, DNS, the Xray process or any
+    privileged API. It speaks only to IMyVpnServiceFacade, which is either the
+    in-process facade (proxy-only, unprivileged mode) or the IPC-backed facade
+    (TUN/Kill Switch mode). That single rule is what keeps privilege escalation
+    out of the GUI.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>MyVpn.UI</RootNamespace>
+    <AssemblyName>myvpn-ui</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../MyVpn.Application/MyVpn.Application.csproj" />
+    <ProjectReference Include="../MyVpn.Infrastructure/MyVpn.Infrastructure.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+    <ProjectReference Include="../MyVpn.Ipc/MyVpn.Ipc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Localization/locales/*.json" />
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+
+</Project>

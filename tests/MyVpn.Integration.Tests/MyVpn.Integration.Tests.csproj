@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>MyVpn.Integration.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Application/MyVpn.Application.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Infrastructure/MyVpn.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Ipc/MyVpn.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

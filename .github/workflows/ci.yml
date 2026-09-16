@@ -1,0 +1,929 @@
+# =============================================================================
+# MyVpn — continuous integration
+# =============================================================================
+#
+# Pipeline shape (see docs/architecture/overview.md for the module inventory):
+#
+#   build -> unit tests -> integration tests -> static analysis
+#         -> security scanning -> packaging -> signing -> artifact generation
+#
+# -----------------------------------------------------------------------------
+# STATE OF THE TREE (honest, as of the last verification)
+# -----------------------------------------------------------------------------
+# `dotnet build MyVpn.sln -c Release` now succeeds with 0 warnings and 0 errors:
+# all fifteen projects have source, including entry points for MyVpn.Service,
+# MyVpn.Cli and MyVpn.UI. Two things are still not where they need to be, and
+# this workflow does not pretend otherwise:
+#
+#   * MyVpn.Core.Tests currently has failing tests (9 of ~696 at the last run,
+#     e.g. GeoAssetValidatorTests expects failure code `truncated_entry` where
+#     the validator returns `malformed_entry`). These are real disagreements
+#     between the tests and the implementation, not CI flakiness, so `build-test`
+#     is expected to be red until they are resolved. That is the correct
+#     behaviour: the pipeline is a gate, not a rubber stamp.
+#   * tests/MyVpn.Integration.Tests is configured but contains no tests yet, so
+#     that leg passes vacuously. Add the privileged cases with the
+#     `Category = "RequiresRoot"` trait described below.
+#
+# Do not read a green run as "MyVpn is finished". See README.md,
+# "Current status (honest)", and docs/architecture/overview.md,
+# "Implemented vs planned".
+#
+# The `packaging` job keeps a preflight guard on the three entry points: it
+# publishes and packages only when they exist, and otherwise emits a loud
+# ::notice:: and skips. That guard is now satisfied, but it stays so the job
+# degrades honestly if an entry point is ever removed.
+#
+# -----------------------------------------------------------------------------
+# TEST SELECTION
+# -----------------------------------------------------------------------------
+# Privileged tests (real TUN device, real firewall, real routes) must be marked
+# with the xunit trait `Category = "RequiresRoot"`. On Linux runners this
+# workflow runs `--filter "Category!=RequiresRoot"`; Windows and macOS runners
+# have passwordless elevation available, so they run everything.
+#
+# Deliberately NOT hardcoded here: MSBuild node serialization (`-m:1`). It is a
+# local memory-pressure workaround, not a CI requirement; CI runners are sized
+# for parallel MSBuild and forcing serialization only slows the matrix down.
+# =============================================================================
+
+name: CI
+
+# Quoted so YAML 1.1 parsers (PyYAML) do not fold the key to boolean `true`.
+"on":
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more raise it explicitly.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref (a new push makes the old one moot).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Directory.Build.props switches to deterministic/source-linked builds when CI=true.
+  CI: 'true'
+  # Pinned network core. Facts and floors: docs/research/03-xray-tun-inbound.md.
+  XRAY_VERSION: '26.9.9'
+  CONFIGURATION: 'Release'
+
+jobs:
+
+  # ===========================================================================
+  # 1. BUILD + UNIT + INTEGRATION TESTS
+  # ===========================================================================
+  # All projects target plain `net8.0` (see docs/adr/ADR-0004-net8-platform-targeting.md),
+  # including the Windows and macOS platform layers, so the identical build and
+  # test commands are meaningful on every runner and the OS matrix is about
+  # verifying the platform code compiles and its pure renderers behave, not about
+  # producing runnable packages (that is the packaging job).
+  # ===========================================================================
+  build-test:
+    name: Build & test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rid: win-x64
+            test_filter: ''
+          - name: linux-x64
+            os: ubuntu-latest
+            rid: linux-x64
+            test_filter: 'Category!=RequiresRoot'
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            rid: linux-arm64
+            test_filter: 'Category!=RequiresRoot'
+          - name: macos-intel
+            os: macos-13
+            rid: osx-x64
+            test_filter: ''
+          - name: macos-apple-silicon
+            os: macos-14
+            rid: osx-arm64
+            test_filter: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        shell: bash
+        run: dotnet restore MyVpn.sln
+
+      # The whole solution now builds, so this is the canonical build step:
+      # `TreatWarningsAsErrors=true` in Directory.Build.props means a green build
+      # is already a real gate (analyzers included).
+      - name: Build
+        shell: bash
+        run: dotnet build MyVpn.sln -c "$CONFIGURATION" --no-restore
+
+      # ---- unit tests -------------------------------------------------------
+      - name: Unit tests (Core, Infrastructure, Platform)
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter='${{ matrix.test_filter }}'
+          args=(--no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults/unit)
+          if [ -n "$filter" ]; then args+=(--filter "$filter"); fi
+          for project in \
+            tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj \
+            tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj \
+            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
+          do
+            echo "::group::dotnet test $project"
+            dotnet test "$project" -c "$CONFIGURATION" "${args[@]}"
+            echo "::endgroup::"
+          done
+
+      # ---- integration tests ------------------------------------------------
+      # On Linux these run unprivileged only: anything needing CAP_NET_ADMIN or
+      # /dev/net/tun must carry the RequiresRoot trait and is filtered out here.
+      - name: Integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter='${{ matrix.test_filter }}'
+          args=(--no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults/integration)
+          if [ -n "$filter" ]; then args+=(--filter "$filter"); fi
+          dotnet test tests/MyVpn.Integration.Tests/MyVpn.Integration.Tests.csproj \
+            -c "$CONFIGURATION" "${args[@]}"
+
+      - name: Upload coverage and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}
+          path: |
+            TestResults/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ===========================================================================
+  # 2. FULL SOLUTION BUILD — tracked gap, non-blocking
+  # ===========================================================================
+  # This is the job that must become the gate. It is intentionally red until
+  # MyVpn.Service, MyVpn.Cli and MyVpn.UI get an entry point (CS5001).
+  # `continue-on-error` keeps a known-incomplete tree from failing every PR
+  # while still surfacing the failure in the job list. Remove the
+  # `continue-on-error` line — and delete this comment — when the shells land.
+  # ===========================================================================
+  full-solution-build:
+    name: Full solution build (tracked gap)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      - name: Build entire solution
+        run: dotnet build MyVpn.sln -c ${{ env.CONFIGURATION }} --no-restore
+
+  # ===========================================================================
+  # 3. STATIC ANALYSIS — formatting + analyzers
+  # ===========================================================================
+  # NON-BLOCKING BY CHOICE. Directory.Build.props sets
+  # `EnforceCodeStyleInBuild=false`, and there is no formatting baseline yet, so
+  # `dotnet format --verify-no-changes` would report drift on a tree that has
+  # never been formatted. This job reports that drift without blocking merges.
+  # Flip `continue-on-error` to false (or delete it) once the tree is clean and
+  # the baseline is committed; after that, formatting becomes a merge gate.
+  #
+  # Note that the compiler is *already* a hard gate: TreatWarningsAsErrors=true
+  # plus EnableNETAnalyzers=true in Directory.Build.props means analyzer
+  # diagnostics fail the build-test job above.
+  # ===========================================================================
+  static-analysis:
+    name: Formatting & code style (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      - name: Verify whitespace and style
+        run: dotnet format whitespace MyVpn.sln --verify-no-changes --no-restore --verbosity diagnostic
+
+      - name: Verify analyzer fixes
+        run: dotnet format analyzers MyVpn.sln --verify-no-changes --no-restore --verbosity diagnostic
+
+  # ===========================================================================
+  # 4. CODEQL (C#)
+  # ===========================================================================
+  # Builds the existing graph for the same reason as build-test (KNOWN GAPS).
+  # Once the solution compiles, replace the explicit project list with
+  # `dotnet build MyVpn.sln -c Release --no-restore`.
+  # ===========================================================================
+  codeql:
+    name: CodeQL (C#)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      - name: Build analyzable projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          projects=(
+            src/MyVpn.Core/MyVpn.Core.csproj
+            src/MyVpn.Application/MyVpn.Application.csproj
+            src/MyVpn.Infrastructure/MyVpn.Infrastructure.csproj
+            src/MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj
+            src/MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj
+            src/MyVpn.Platform.Windows/MyVpn.Platform.Windows.csproj
+            src/MyVpn.Platform.MacOS/MyVpn.Platform.MacOS.csproj
+            src/MyVpn.Ipc/MyVpn.Ipc.csproj
+            tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj
+            tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj
+            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
+            tests/MyVpn.Integration.Tests/MyVpn.Integration.Tests.csproj
+          )
+          for project in "${projects[@]}"; do
+            dotnet build "$project" -c "$CONFIGURATION" --no-restore
+          done
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:csharp
+
+  # ===========================================================================
+  # 5. SECURITY SCANNING — dependencies and secrets
+  # ===========================================================================
+  security-scan:
+    name: Dependency & secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout (full history for secret scanning)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The merge gate for dependencies: fails on high/critical advisories and
+      # on licences outside the allow-list. Pull requests only, because the
+      # action needs a base/head diff.
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      # Advisory, not a gate: `dotnet list package --vulnerable` reports and
+      # exits 0. `dependency-review` above is the enforcement point for NuGet
+      # advisories on PRs; this step makes the same data visible on push and
+      # workflow_dispatch runs.
+      - name: Known-vulnerable NuGet packages (advisory)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in $(find src tests -name '*.csproj' -not -path '*/obj/*' | sort); do
+            echo "::group::dotnet list $project package --vulnerable"
+            dotnet list "$project" package --vulnerable --include-transitive || true
+            echo "::endgroup::"
+          done
+
+  # ===========================================================================
+  # 6. LICENCE / PROVENANCE AUDIT
+  # ===========================================================================
+  # Produces the machine-readable dependency inventory that NOTICE §4 promises
+  # ("A machine-readable dependency inventory is produced by the CI
+  # `license-scan` job"). Keep the job id `license-scan` — NOTICE references it.
+  # ===========================================================================
+  license-scan:
+    name: Third-party licence inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      - name: Generate dependency inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/licences
+          # Central pin file is the authoritative version list.
+          cp Directory.Packages.props artifacts/licences/Directory.Packages.props
+          for project in $(find src tests -name '*.csproj' -not -path '*/obj/*' | sort); do
+            name="$(basename "$project" .csproj)"
+            dotnet list "$project" package --include-transitive --format json \
+              > "artifacts/licences/${name}.deps.json" || true
+          done
+          # Redistribution prerequisites that must never disappear (NOTICE §5).
+          for required in NOTICE LICENSE; do
+            if [ ! -f "$required" ]; then
+              echo "::error::$required is missing; release artifacts must ship it."
+              exit 1
+            fi
+          done
+          {
+            echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "commit=${GITHUB_SHA}"
+            echo "xray_pinned=${XRAY_VERSION}"
+          } > artifacts/licences/provenance.txt
+
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-inventory
+          path: artifacts/licences/
+          retention-days: 30
+
+  # ===========================================================================
+  # 7. CLEAN-ROOM PROVENANCE GUARD  (see docs/adr/ADR-0009-licensing-and-provenance.md)
+  # ===========================================================================
+  # Fails if anything under src/ or tests/ names the excluded network core, or
+  # contains a v2rayN path/identifier. The whole point of ADR-0009 is that the
+  # boundary between "studied" and "authored" stays auditable, so this is a gate.
+  #
+  # Scope note: only src/ and tests/ are scanned. docs/, LICENSE, NOTICE,
+  # README.md and this workflow legitimately name those projects, and they are
+  # outside the scan roots by construction rather than by exclusion patterns.
+  #
+  # Prose carve-out: XML-doc/comment citations of the studied prior art (e.g.
+  # "v2rayN issue #9765") are permitted and reported as ::notice:: — they are
+  # attribution, not copied code. A v2rayN token on a non-comment line, a
+  # namespace/using/ProjectReference, or the repo path `2dust/v2rayN` fails.
+  # ===========================================================================
+  provenance-guard:
+    name: Clean-room provenance guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan src/ and tests/ for forbidden tokens
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+
+          for root in src tests; do
+            if [ ! -d "$root" ]; then
+              echo "::error::expected directory '$root' is missing"
+              status=1
+            fi
+          done
+          [ "$status" -eq 0 ] || exit "$status"
+
+          grep_opts=(-rniE --exclude-dir=obj --exclude-dir=bin --exclude-dir=.git)
+
+          # --- 1. The excluded network core must not be named at all.
+          singbox="$(grep "${grep_opts[@]}" 'sing[[:space:]_-]?box' src tests 2>/dev/null || true)"
+          if [ -n "$singbox" ]; then
+            echo "::error::Forbidden network-core reference ('sing-box') found under src/ or tests/:"
+            echo "$singbox"
+            status=1
+          fi
+
+          # --- 2. v2rayN paths / identifiers (not prose).
+          ident_re='2dust/v2rayn|v2rayn[./]|(using|namespace|import|alias)[[:space:]]+v2rayn|projectreference[^>]*v2rayn|packagereference[^>]*v2rayn|assemblyname[^>]*v2rayn|rootnamespace[^>]*v2rayn'
+          idents="$(grep "${grep_opts[@]}" "$ident_re" src tests 2>/dev/null || true)"
+          if [ -n "$idents" ]; then
+            echo "::error::Forbidden v2rayN path/identifier found under src/ or tests/:"
+            echo "$idents"
+            status=1
+          fi
+
+          # --- 3. The bare token on a non-comment line means real code/identifier.
+          code_hits="$(grep "${grep_opts[@]}" 'v2rayn' src tests 2>/dev/null \
+            | grep -vE ':[[:space:]]*(///|//|\*|/\*)' || true)"
+          if [ -n "$code_hits" ]; then
+            echo "::error::'v2rayN' appears outside a comment under src/ or tests/:"
+            echo "$code_hits"
+            status=1
+          fi
+
+          # --- 4. Reported, allowed: documented prose citations in comments.
+          citations="$(grep "${grep_opts[@]}" 'v2rayn' src tests 2>/dev/null \
+            | grep -E ':[[:space:]]*(///|//|\*|/\*)' || true)"
+          if [ -n "$citations" ]; then
+            echo "::notice::Documented comment citations of the studied prior art (allowed; attribution only):"
+            echo "$citations"
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            echo "Clean-room guard passed: no excluded core name, no v2rayN path or identifier."
+          fi
+          exit "$status"
+
+  # ===========================================================================
+  # 8. PACKAGING  (installer / portable / deb / rpm / AppImage / .app)
+  # ===========================================================================
+  # One leg per target RID. Cross-compilation is avoided where a matching
+  # runner exists: win-x64 on windows-latest, linux-arm64 on the arm64 runner,
+  # osx-x64 on macos-13 (Intel), osx-arm64 on macos-14.
+  #
+  # Publish is always `--self-contained true` with an explicit RID so the
+  # produced payload has no runtime dependency for the user. Trimming stays off:
+  # Avalonia's XAML/reflection paths and the JSON config model are not
+  # trim-analysed yet.
+  #
+  # The preflight guard keeps the job green while the head projects are shells
+  # (KNOWN GAPS). It self-activates when src/MyVpn.{UI,Service,Cli}/Program.cs
+  # appear — no workflow edit required.
+  # ===========================================================================
+  packaging:
+    name: Package (${{ matrix.name }})
+    needs: [build-test]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: win-x64,      os: windows-latest,   rid: win-x64,      family: windows, xray_asset: windows-64 }
+          - { name: win-arm64,    os: windows-latest,   rid: win-arm64,    family: windows, xray_asset: windows-arm64-v8a }
+          - { name: linux-x64,    os: ubuntu-latest,    rid: linux-x64,    family: linux,   xray_asset: linux-64 }
+          - { name: linux-arm64,  os: ubuntu-24.04-arm, rid: linux-arm64,  family: linux,   xray_asset: linux-arm64-v8a }
+          - { name: osx-x64,      os: macos-13,         rid: osx-x64,      family: macos,   xray_asset: macos-64 }
+          - { name: osx-arm64,    os: macos-14,         rid: osx-arm64,    family: macos,   xray_asset: macos-arm64-v8a }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore MyVpn.sln
+
+      - name: Preflight — are the head projects implemented?
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for entry in src/MyVpn.UI/Program.cs src/MyVpn.Service/Program.cs src/MyVpn.Cli/Program.cs; do
+            if [ ! -f "$entry" ]; then
+              echo "::warning::packaging prerequisite missing: $entry"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Packaging skipped for ${{ matrix.rid }}: the UI/service/CLI entry points are not implemented yet. See README.md 'Implemented vs planned' and the KNOWN GAPS comment at the top of this workflow."
+          fi
+
+      # ---- publish ----------------------------------------------------------
+      # Versions come from Directory.Build.props (VersionPrefix 0.1.0); the RID
+      # and the self-contained flag are explicit rather than inferred.
+      - name: Publish (self-contained, RID-specific)
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          out="dist/$rid/app"
+          for project in src/MyVpn.UI src/MyVpn.Service src/MyVpn.Cli; do
+            echo "::group::publish $project ($rid)"
+            dotnet publish "$project" \
+              -c "$CONFIGURATION" \
+              -r "$rid" \
+              --self-contained true \
+              -p:PublishTrimmed=false \
+              -p:PublishSingleFile=false \
+              -p:DebugType=none \
+              -o "$out"
+            echo "::endgroup::"
+          done
+
+      # ---- bundle the network core, with provenance -------------------------
+      # Xray-core is bundled unmodified (MPL-2.0, separate process; see NOTICE §1).
+      # The asset names below are Xray release asset names. Integrity is enforced
+      # against build/xray-checksums.txt when that pin file exists; until it does,
+      # the computed SHA-256 is recorded in the manifest and a warning is raised,
+      # because a release must never ship an unrecorded binary (NOTICE §5).
+      - name: Bundle Xray-core and record provenance
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          XRAY_ASSET: ${{ matrix.xray_asset }}
+        run: |
+          set -euo pipefail
+          out="dist/$RID/app"
+          mkdir -p "$out/xray" "$out/licenses"
+          url="https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-${XRAY_ASSET}.zip"
+          echo "Fetching $url"
+          curl -sSL --fail --retry 3 --max-time 300 "$url" -o "xray-${XRAY_ASSET}.zip"
+
+          hash_of() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
+            else shasum -a 256 "$1" | awk '{print $1}'; fi
+          }
+
+          if [ -f build/xray-checksums.txt ]; then
+            expected="$(awk -v v="v${XRAY_VERSION}" -v a="Xray-${XRAY_ASSET}.zip" '$1==v && $2==a {print $3}' build/xray-checksums.txt)"
+            actual="$(hash_of "xray-${XRAY_ASSET}.zip")"
+            if [ -z "$expected" ]; then
+              echo "::error::build/xray-checksums.txt has no entry for v${XRAY_VERSION} Xray-${XRAY_ASSET}.zip"
+              exit 1
+            fi
+            if [ "$expected" != "$actual" ]; then
+              echo "::error::Xray-core checksum mismatch: expected $expected, got $actual"
+              exit 1
+            fi
+          else
+            echo "::warning::build/xray-checksums.txt is absent; bundling Xray-core without an expected-hash check. Record the hash below in the pin file before the first release."
+          fi
+
+          unzip -q -o "xray-${XRAY_ASSET}.zip" -d "$out/xray"
+          # Upstream licence must travel with the binary.
+          if [ -f "$out/xray/LICENSE" ]; then mv "$out/xray/LICENSE" "$out/licenses/LICENSE-Xray-core"; fi
+          if [ -f "$out/xray/LICENSE-wintun.txt" ]; then mv "$out/xray/LICENSE-wintun.txt" "$out/licenses/LICENSE-Wintun"; fi
+
+          {
+            echo "xray_version=v${XRAY_VERSION}"
+            echo "xray_asset=Xray-${XRAY_ASSET}.zip"
+            echo "xray_sha256=$(hash_of "xray-${XRAY_ASSET}.zip")"
+          } >> "provenance-${RID}.txt"
+
+      # ---- Windows: portable ZIP + MSI installer ----------------------------
+      # The WiX authoring files are planned, not present (build/wix/). The
+      # installer step is guarded so CI stays honest rather than red.
+      - name: Package Windows (portable ZIP + MSI)
+        if: steps.preflight.outputs.ready == 'true' && matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          $rid = "${{ matrix.rid }}"
+          $version = "0.1.0"
+          New-Item -ItemType Directory -Force -Path "dist/$rid" | Out-Null
+          Compress-Archive -Path "dist/$rid/app/*" -DestinationPath "dist/$rid/MyVpn-$version-$rid-portable.zip" -Force
+          if (Test-Path "build/wix/MyVpn.wxs") {
+            dotnet tool install --global wix --version 5.*
+            wix build build/wix/MyVpn.wxs -arch "$(if ($rid -eq 'win-arm64') {'arm64'} else {'x64'})" -o "dist/$rid/MyVpn-$version-$rid.msi"
+          } else {
+            Write-Host "::warning::build/wix/MyVpn.wxs is absent; MSI installer skipped (portable ZIP produced)."
+          }
+
+      # ---- Linux: .deb + .rpm (nfpm) + AppImage -----------------------------
+      # FHS layout and AppImage read-only-mount consequences:
+      # docs/research/07-linux-networking.md §2.8. AppImage ships the GUI only —
+      # a root helper cannot be installed from a read-only squashfs.
+      - name: Package Linux (.deb, .rpm, AppImage)
+        if: steps.preflight.outputs.ready == 'true' && matrix.family == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          version='0.1.0'
+          mkdir -p "dist/$rid"
+
+          arch='amd64'
+          [ "$rid" = 'linux-arm64' ] && arch='arm64'
+
+          # -- nfpm: one declarative config, both package formats -------------
+          curl -sSL --fail --retry 3 \
+            "https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_${arch}.tar.gz" \
+            -o nfpm.tar.gz
+          tar -xzf nfpm.tar.gz nfpm
+          mkdir -p build/nfpm
+          cat > build/nfpm/nfpm.yaml <<EOF
+          name: myvpn
+          arch: ${arch}
+          platform: linux
+          version: ${version}
+          section: net
+          priority: optional
+          maintainer: MyVpn Contributors
+          description: MyVpn VPN client (Xray-core TUN)
+          license: GPL-3.0-or-later
+          contents:
+            - src: dist/${rid}/app
+              dst: /usr/lib/myvpn
+            - src: NOTICE
+              dst: /usr/share/doc/myvpn/NOTICE
+            - src: LICENSE
+              dst: /usr/share/doc/myvpn/LICENSE
+          EOF
+          ./nfpm package --config build/nfpm/nfpm.yaml --packager deb --target "dist/$rid/MyVpn-${version}-${rid}.deb"
+          ./nfpm package --config build/nfpm/nfpm.yaml --packager rpm --target "dist/$rid/MyVpn-${version}-${rid}.rpm"
+
+          # -- AppImage: GUI only, no privileged helper ------------------------
+          tool_arch='x86_64'
+          [ "$rid" = 'linux-arm64' ] && tool_arch='aarch64'
+          mkdir -p "dist/$rid/MyVpn.AppDir/usr/bin"
+          cp -r "dist/$rid/app/." "dist/$rid/MyVpn.AppDir/usr/bin/"
+          cat > "dist/$rid/MyVpn.AppDir/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/myvpn-ui" "$@"
+          EOF
+          chmod +x "dist/$rid/MyVpn.AppDir/AppRun"
+          curl -sSL --fail --retry 3 \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${tool_arch}.AppImage" \
+            -o appimagetool.AppImage
+          chmod +x appimagetool.AppImage
+          ARCH="$tool_arch" ./appimagetool.AppImage --appimage-extract-and-run \
+            "dist/$rid/MyVpn.AppDir" "dist/$rid/MyVpn-${version}-${rid}.AppImage"
+
+      # ---- macOS: .app bundle ----------------------------------------------
+      # Bundle layout is deliberately bundle-relative-free for assets: the
+      # researched failure mode is that bundle paths change under App
+      # Translocation (docs/research/02 §1.7), so MyVpn resolves state
+      # elsewhere. Here we only assemble the bundle and ad-hoc sign it; real
+      # signing and notarization happen in the `signing` job when secrets exist.
+      - name: Package macOS (.app bundle)
+        if: steps.preflight.outputs.ready == 'true' && matrix.family == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          version='0.1.0'
+          app="dist/$rid/MyVpn.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "dist/$rid"
+          cp -r "dist/$rid/app/." "$app/Contents/MacOS/"
+          cat > "$app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key><string>org.myvpn.client</string>
+            <key>CFBundleName</key><string>MyVpn</string>
+            <key>CFBundleExecutable</key><string>myvpn-ui</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${version}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          cp NOTICE LICENSE "$app/Contents/Resources/"
+          # Ad-hoc signature so the bundle is at least self-consistent locally.
+          codesign --force --deep --sign - "$app" || echo "::warning::ad-hoc codesign failed; the signing job will sign properly when secrets are present."
+          ditto -c -k --keepParent "$app" "dist/$rid/MyVpn-${version}-${rid}.app.zip"
+
+      # ---- artifact manifest (NOTICE §5 requires version + SHA-256) ---------
+      - name: Generate artifact manifest
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          hash_of() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
+            else shasum -a 256 "$1" | awk '{print $1}'; fi
+          }
+          {
+            echo "{"
+            echo "  \"product\": \"MyVpn\","
+            echo "  \"version\": \"0.1.0\","
+            echo "  \"rid\": \"$RID\","
+            echo "  \"commit\": \"${GITHUB_SHA}\","
+            echo "  \"run\": \"${GITHUB_RUN_ID}\","
+            echo "  \"artifacts\": ["
+            first=1
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              [ "$first" -eq 1 ] || echo "    ,"
+              first=0
+              printf '    {"path": "%s", "sha256": "%s"}' "$file" "$(hash_of "$file")"
+            done < <(find "dist/$RID" -maxdepth 1 -type f ! -name manifest.json | sort)
+            echo
+            echo "  ]"
+            echo "}"
+          } > "dist/$RID/manifest.json"
+          cat "dist/$RID/manifest.json"
+
+      - name: Upload package
+        if: steps.preflight.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.name }}
+          path: |
+            dist/${{ matrix.rid }}/**
+            provenance-${{ matrix.rid }}.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  # ===========================================================================
+  # 9. SIGNING
+  # ===========================================================================
+  # Every signing step is conditional on the relevant secret being configured.
+  # Absent secrets are NOT a failure: an unsigned artifact is a legitimate
+  # outcome for pull requests, forks and pre-release builds. The pattern used is
+  # secret -> job env -> `if: env.X != ''`, which is the portable form of the
+  # `if: ${{ secrets.X != '' }}` guard (the `secrets` context is not available in
+  # every `if` position, whereas `env` always is).
+  # ===========================================================================
+  signing:
+    name: Sign artifacts (${{ matrix.name }})
+    needs: [packaging]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest }
+          - { name: linux,   os: ubuntu-latest }
+          - { name: macos,   os: macos-14 }
+    env:
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download unsigned packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: false
+
+      # -- Windows: Authenticode every PE, then the installers ----------------
+      - name: Sign Windows binaries (Authenticode)
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          $ts = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+          $targets = Get-ChildItem dist -Recurse -File -Include *.exe,*.dll,*.msi
+          foreach ($t in $targets) {
+            & signtool sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /tr $ts /td SHA256 $t.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($t.FullName)" }
+          }
+          Remove-Item $pfx -Force
+
+      - name: Skip notice (Windows)
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE_BASE64 == ''
+        shell: bash
+        run: echo "::notice::WINDOWS_CERTIFICATE_BASE64 is not configured; Windows artifacts left unsigned."
+
+      # -- macOS: codesign + notarize + staple --------------------------------
+      - name: Sign and notarize macOS bundle
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/myvpn-signing.keychain-db"
+          cert="$RUNNER_TEMP/myvpn-signing.p12"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$cert"
+          security create-keychain -p "" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "" "$keychain"
+          security import "$cert" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          identity="$APPLE_SIGNING_IDENTITY"
+          find dist -name '*.app' -maxdepth 4 -print0 | while IFS= read -r -d '' app; do
+            codesign --force --deep --options runtime --timestamp --sign "$identity" "$app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done
+          rm -f "$cert"
+
+      - name: Notarize and staple macOS bundle
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 != '' && env.APPLE_ID != '' && env.APPLE_TEAM_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -name '*.app.zip' -maxdepth 4 -print0 | while IFS= read -r -d '' archive; do
+            xcrun notarytool submit "$archive" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+              --wait --timeout 30m
+          done
+
+      - name: Skip notice (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 == ''
+        shell: bash
+        run: echo "::notice::APPLE_CERTIFICATE_BASE64 is not configured; macOS artifacts left ad-hoc signed only."
+
+      # -- Linux: detached GPG signatures ------------------------------------
+      - name: Sign Linux packages (GPG detached)
+        if: runner.os == 'Linux' && env.GPG_PRIVATE_KEY != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          find dist -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -print0 \
+            | while IFS= read -r -d '' artifact; do
+                gpg --batch --yes --armor --detach-sign \
+                  ${GPG_PASSPHRASE:+--pinentry-mode loopback --passphrase "$GPG_PASSPHRASE"} \
+                  "$artifact"
+              done
+
+      - name: Skip notice (Linux)
+        if: runner.os == 'Linux' && env.GPG_PRIVATE_KEY == ''
+        shell: bash
+        run: echo "::notice::GPG_PRIVATE_KEY is not configured; Linux packages left unsigned."
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.name }}
+          path: dist/**
+          if-no-files-found: warn
+          retention-days: 14

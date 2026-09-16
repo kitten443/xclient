@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MyVpn.Ipc — the wire contract between the unprivileged UI and the
+    privileged VPN service, plus the authenticated transport.
+
+    Deliberately dependency-free (Core only): the IPC layer must be auditable in
+    isolation, and it must be testable end-to-end on a normal developer machine.
+    The transport binds to a Unix domain socket (Linux/macOS) or a named pipe
+    with an explicit ACL (Windows) and performs peer-credential verification.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MyVpn.Ipc</RootNamespace>
+    <AssemblyName>MyVpn.Ipc</AssemblyName>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+  </ItemGroup>
+
+</Project>

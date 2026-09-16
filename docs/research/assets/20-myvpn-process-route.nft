@@ -1,0 +1,53 @@
+#!/usr/sbin/nft -f
+# MyVpn process routing: tag selected processes' packets with a firewall mark,
+# then let `ip rule fwmark` steer the marked traffic into the tunnel.
+#
+# CRITICAL semantics of `socket cgroupv2 level N "path"` (nft(8), SOCKET
+# EXPRESSION): for a socket in cgroup `a/b`, ancestor level 1 matches `a` and
+# level 2 matches `b`. So `level 1 "myvpn.slice"` matches the WHOLE slice
+# subtree (myvpn.slice/myvpn.service, myvpn.slice/child.scope, ...).
+#
+# The match resolves the socket's cgroup *ID* at rule-evaluation time. It does
+# NOT match a path dynamically: the cgroup must EXIST when the rule is loaded,
+# and if it is destroyed+recreated it receives a new ID and the rule stops
+# matching. The helper must therefore (re)create the slice and re-apply these
+# rules on every connect. Requires Linux >= 5.13 and nftables >= 0.99.
+
+define VPN_FWMARK = 0xca6c
+define VPN_IF     = "myvpn0"
+define VPN_CGROUP = "myvpn.slice"
+
+table inet myvpn_route
+delete table inet myvpn_route
+
+table inet myvpn_route {
+	# Locally generated traffic. `type route` re-runs the route lookup after
+	# the mark changes, which is what makes policy routing take effect.
+	# nft(8): "type route ... a new route lookup is performed if relevant parts
+	# of the IP header have changed."
+	chain mark_output {
+		type route hook output priority mangle; policy accept;
+
+		# LOOP PREVENTION: traffic already on the tunnel is never re-marked,
+		# so it cannot be routed back into the tunnel forever.
+		oifname $VPN_IF return
+
+		# Xray's own outbound sockets are excluded by keeping them OUT of
+		# myvpn.slice (they live in myvpn-xray.service), so no mark is needed.
+		socket cgroupv2 level 1 $VPN_CGROUP meta mark set $VPN_FWMARK
+	}
+
+	# Traffic arriving from containers / other netns that we forward.
+	chain mark_prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname $VPN_IF return comment "never re-mark tunnel-originated traffic"
+		socket cgroupv2 level 1 $VPN_CGROUP meta mark set $VPN_FWMARK
+	}
+
+	# Strip the mark on egress so it can never leak onto the wire and so
+	# conntrack mark/route caching cannot pin a stale decision.
+	chain clear_mark {
+		type filter hook postrouting priority mangle; policy accept;
+		oifname $VPN_IF meta mark set 0
+	}
+}

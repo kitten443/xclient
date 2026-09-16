@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>MyVpn.Platform.MacOS</RootNamespace>
+    <AssemblyName>MyVpn.Platform.MacOS</AssemblyName>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

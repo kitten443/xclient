@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MyVpn.Platform.Abstractions — the seam between the portable application and
+    the operating system.
+
+    Two kinds of type live here:
+      1. Capability interfaces (IKillSwitch, IRouteManager, IDnsConfigurator,
+         IProcessRouter, ISystemProxy, IPrivilegedHost, ITunDeviceManager).
+      2. *Plan* value objects plus pure *renderers*. A plan is a
+         platform-neutral description of the desired network state; a renderer
+         turns it into nftables text / WFP filter descriptors / PF anchor text.
+
+    Splitting plan from execution is what makes the OS integration testable on a
+    CI runner that has no privileges: the renderers are pure functions and are
+    covered by unit tests, while only the thin executors require root.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MyVpn.Platform.Abstractions</RootNamespace>
+    <AssemblyName>MyVpn.Platform.Abstractions</AssemblyName>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+  </ItemGroup>
+
+</Project>

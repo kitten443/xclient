@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MyVpn.UI.App"
+             RequestedThemeVariant="Default">
+
+  <!--
+    Theme is selected at runtime through RequestedThemeVariant; "Default" follows the OS.
+    Light and Dark are the explicit alternatives, and additional resources (accent colour,
+    compact density) are layered on top of the Fluent theme.
+  -->
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="MyVpnAccentBrush" Color="#2F6FED" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="MyVpnAccentBrush" Color="#5B8DEF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Default">
+          <SolidColorBrush x:Key="MyVpnAccentBrush" Color="#2F6FED" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+</Application>

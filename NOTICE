@@ -1,0 +1,97 @@
+MyVpn — third-party notices and provenance
+==========================================
+
+MyVpn is an independent, from-scratch implementation. It is *architecture-inspired*
+by prior art in the Xray/V2Ray client ecosystem, but it does not contain copied
+source code from those projects. Where prior art informed a design decision, the
+influence is recorded in `docs/adr/` and `docs/research/` with a reference to the
+original project, so that the boundary between "studied" and "authored" is auditable.
+
+-------------------------------------------------------------------------------
+1. Xray-core (the network engine)
+-------------------------------------------------------------------------------
+Project : https://github.com/XTLS/Xray-core
+License : Mozilla Public License 2.0 (MPL-2.0)
+
+MyVpn does NOT link against or modify Xray-core source code. It launches the
+Xray-core binary as a separate process and communicates with it through a
+generated JSON configuration file and its process stdout/stderr. The Xray-core
+binary is distributed unmodified, either:
+
+  * fetched from the official release channel with SHA-256 verification, or
+  * supplied by the user as a system package / manual binary selection.
+
+MPL-2.0 is a file-level copyleft licence. Because Xray-core is consumed as a
+separate executable and never as linked source, MPL-2.0 imposes no licensing
+obligation on MyVpn's own source code. The unmodified Xray-core binary, and any
+license/notice files shipped alongside it, remain under MPL-2.0. When MyVpn
+bundles Xray-core (in installer/portable/AppImage artifacts), the upstream
+LICENSE file is redistributed verbatim in the bundle's `licenses/` directory.
+
+-------------------------------------------------------------------------------
+2. Geo data (geoip.dat / geosite.dat)
+-------------------------------------------------------------------------------
+Files   : geoip.dat, geosite.dat
+Source  : https://github.com/v2fly/geoip, https://github.com/v2fly/domain-list-community
+License : CC-BY-SA 4.0 / MIT depending on dataset (see upstream repositories)
+
+Geo data is treated strictly as a *data asset*, downloaded at runtime or bundled
+unmodified. It is never compiled into MyVpn. MyVpn stores it in a user-writable
+directory, records its SHA-256 and provenance, and never modifies the file
+contents. Attribution and licence text accompany any redistributed copy.
+
+-------------------------------------------------------------------------------
+3. Reference projects studied (NO code copied)
+-------------------------------------------------------------------------------
+Project : v2rayN — https://github.com/2dust/v2rayN
+License : GNU GPL-3.0
+Use     : Studied for architecture and UX lessons only. v2rayN is a GPL-3.0
+          work. MyVpn does not copy its source code. Because MyVpn is itself
+          licensed GPL-3.0-or-later, any *future* decision to copy v2rayN code
+          would be licence-compatible, but it would still require preserving
+          copyright notices and marking the files as derived. No such copying
+          has occurred. See docs/research/01-v2rayn-architecture.md.
+
+Project : sing-box — https://github.com/SagerNet/sing-box
+License : GNU GPL-3.0 / other
+Use     : NOT USED. sing-box is explicitly excluded as a network core by the
+          project requirements. It was not studied for implementation reuse.
+
+Project : Wintun — https://www.wintun.net/ (WireGuard project)
+License : GPL-2.0 / MIT dual (see upstream; the driver is distributed under a
+          prebuilt-binary licence that permits redistribution of the *unmodified*
+          binary, not modification)
+Use     : Referenced as the Windows TUN driver. MyVpn relies on whatever TUN
+          driver Xray-core itself uses on Windows and does not redistribute or
+          modify a driver unless a licence review (docs/research/06) confirms it
+          is permitted.
+
+Project : Happ — https://www.happ.su/main/dev-docs
+License : Proprietary application; documentation is public.
+Use     : Only *publicly documented* subscription HTTP header formats are
+          implemented, from the published developer documentation. No Happ code
+          was copied or decompiled. See docs/research/05.
+
+-------------------------------------------------------------------------------
+4. NuGet dependencies
+-------------------------------------------------------------------------------
+All NuGet dependencies are permissively licensed (MIT / Apache-2.0) and are
+pinned centrally in Directory.Packages.props. Notable ones:
+
+  * Avalonia UI            — MIT
+  * CommunityToolkit.Mvvm  — MIT
+  * Microsoft.Extensions.* — MIT
+  * xunit / Shouldly       — Apache-2.0 / MIT (test-only)
+
+A machine-readable dependency inventory is produced by the CI
+`license-scan` job (see .github/workflows/ci.yml).
+
+-------------------------------------------------------------------------------
+5. Redistribution checklist for release artifacts
+-------------------------------------------------------------------------------
+Before publishing any artifact that bundles third-party binaries or data:
+  1. include the upstream LICENSE text for Xray-core;
+  2. include the upstream LICENSE/attribution for geo data;
+  3. include this NOTICE file;
+  4. record the exact upstream version + SHA-256 of every bundled binary in
+     `artifacts/manifest.json`.

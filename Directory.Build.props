@@ -1,0 +1,54 @@
+<Project>
+
+  <!--
+    Repository-wide build conventions for MyVpn.
+
+    Architectural note (see docs/adr/ADR-0004): every project targets plain `net8.0`,
+    including the Windows/macOS platform implementation projects. We deliberately do NOT
+    use `net8.0-windows` / `net8.0-macos` monikers, because:
+      * the whole solution then restores, builds and unit-tests on any single CI runner;
+      * OS-specific behaviour is selected at runtime via capability probing;
+      * P/Invoke signatures do not require the OS-specific targeting pack to compile.
+    Unsafe OS calls are additionally guarded by RuntimeInformation checks so that a
+    Linux test run can never execute Windows-only code paths.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Deterministic>true</Deterministic>
+    <NeutralLanguage>en</NeutralLanguage>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+
+    <!-- Treat the compiler as a gate: warnings are build failures. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>MyVpn Contributors</Authors>
+    <Product>MyVpn</Product>
+    <Copyright>Copyright (C) 2025 MyVpn Contributors</Copyright>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!-- Reproducible builds in CI without leaking local absolute paths. -->
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <DeterministicSourcePaths>true</DeterministicSourcePaths>
+  </PropertyGroup>
+
+  <!-- Central package management must not be inherited by generated/obj projects. -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);NU1507</NoWarn>
+  </PropertyGroup>
+
+</Project>

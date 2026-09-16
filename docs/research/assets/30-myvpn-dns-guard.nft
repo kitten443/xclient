@@ -1,0 +1,30 @@
+#!/usr/sbin/nft -f
+# MyVpn DNS leak guard, for the "force through tunnel" mode.
+# Redirects plaintext :53 from the selected slice to the tunnel resolver;
+# anything IPv6 DNS is dropped (the tunnel is IPv4-only in this profile),
+# which is preferable to silently leaking to the ISP resolver.
+#
+# nat chains see only the first packet of a flow, so this is cheap. The
+# redirect target MUST be reachable over the tunnel (it is the pushed DNS).
+# Restore on crash: delete the table (single transaction) — no state persists.
+
+define VPN_DNS4   = 10.8.0.1
+define VPN_IF     = "myvpn0"
+define VPN_CGROUP = "myvpn.slice"
+
+table inet myvpn_dns
+delete table inet myvpn_dns
+
+table inet myvpn_dns {
+	chain dns_hijack {
+		type nat hook output priority dstnat; policy accept;
+
+		oifname $VPN_IF return comment "DNS already inside the tunnel"
+		oifname "lo" return
+
+		socket cgroupv2 level 1 $VPN_CGROUP ip  daddr != 127.0.0.0/8 udp dport 53 dnat to $VPN_DNS4
+		socket cgroupv2 level 1 $VPN_CGROUP ip  daddr != 127.0.0.0/8 tcp dport 53 dnat to $VPN_DNS4
+		socket cgroupv2 level 1 $VPN_CGROUP ip6 daddr != ::1         udp dport 53 drop
+		socket cgroupv2 level 1 $VPN_CGROUP ip6 daddr != ::1         tcp dport 53 drop
+	}
+}

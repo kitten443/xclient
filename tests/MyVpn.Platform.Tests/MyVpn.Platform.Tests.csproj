@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>MyVpn.Platform.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.Windows/MyVpn.Platform.Windows.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.MacOS/MyVpn.Platform.MacOS.csproj" />
+  </ItemGroup>
+
+</Project>

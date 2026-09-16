@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MyVpn.Cli — headless driver.
+
+    This is the "no GUI" entry point used for:
+      * integration testing the real pipeline on a CI runner,
+      * diagnostics collection on a user machine ("myvpn diagnose"),
+      * power users running the client from a terminal.
+
+    It exercises exactly the same application services as the GUI, which is how
+    we keep the UI thin.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyVpn.Cli</RootNamespace>
+    <AssemblyName>myvpn</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../MyVpn.Application/MyVpn.Application.csproj" />
+    <ProjectReference Include="../MyVpn.Infrastructure/MyVpn.Infrastructure.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Windows/MyVpn.Platform.Windows.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.MacOS/MyVpn.Platform.MacOS.csproj" />
+    <ProjectReference Include="../MyVpn.Ipc/MyVpn.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

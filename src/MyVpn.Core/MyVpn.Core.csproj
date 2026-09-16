@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MyVpn.Core — the innermost layer.
+    Contains the domain model, value objects, the VPN state machine and the
+    configuration model. It has ZERO dependencies on UI, OS or I/O, and no
+    NuGet package references at all. Everything here must be unit-testable
+    without touching a real filesystem, network or process.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MyVpn.Core</RootNamespace>
+    <AssemblyName>MyVpn.Core</AssemblyName>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+</Project>
