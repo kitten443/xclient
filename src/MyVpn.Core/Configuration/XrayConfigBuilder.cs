@@ -967,15 +967,24 @@ public static class XrayConfigBuilder
             case DnsMode.Custom:
                 foreach (var server in dns.Servers)
                 {
-                    // Reject anything that is not a literal: an unresolvable resolver would
-                    // silently fall back to the system resolver, which is a DNS leak.
+                    // Boundary assertion, not a policy decision.
+                    //
+                    // DnsSettings.Validate() already rejects a non-IP resolver, and Build() runs
+                    // Settings.Validate() before reaching here, so this branch is unreachable
+                    // through the public entry point. It is kept at the exact place the value
+                    // would enter the generated configuration: if that validator is ever relaxed,
+                    // failing loudly here is far better than handing Xray a hostname. A hostname
+                    // resolver is not cosmetic — the core would fall back to the system resolver
+                    // and leak DNS outside the tunnel.
                     if (!NetworkText.IsIpAddress(server))
                     {
                         warnings.Add(new MyVpnError(
                             ErrorCodes.ConfigInvalid,
                             "error.dns.server_not_ip",
-                            ErrorSeverity.Warning,
-                            $"Resolver '{server}' is not an IP literal and was skipped.")
+                            ErrorSeverity.Error,
+                            $"Resolver '{server}' is not an IP literal. Settings validation should "
+                            + "have rejected it, so this is an internal inconsistency rather than bad "
+                            + "user input.")
                             .WithArg("server", server));
 
                         continue;
