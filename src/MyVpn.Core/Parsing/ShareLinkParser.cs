@@ -206,7 +206,7 @@ public static class ShareLinkParser
         var profile = new ServerProfile
         {
             DisplayName = displayName,
-            Address = uri.Host,
+            Address = NormalizeHost(uri.Host),
             Port = uri.Port,
             Protocol = protocol,
             Transport = transportResult.Value,
@@ -626,6 +626,29 @@ public static class ShareLinkParser
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// Removes the brackets <see cref="Uri"/> keeps around an IPv6 host.
+    /// </summary>
+    /// <remarks>
+    /// A bracketed literal is a URI syntax detail, not part of the address. Leaving them in
+    /// place breaks everything downstream that parses the value as an address — most
+    /// importantly <see cref="MyVpn.Core.Domain.ServerEndpoint.IsIpLiteral"/>, which the Kill
+    /// Switch plan builder uses to decide whether the server can be pinned in a firewall
+    /// rule. A bracketed IPv6 server would be reported as "could not be resolved" and the
+    /// Kill Switch would refuse to arm.
+    /// </remarks>
+    internal static string NormalizeHost(string host)
+    {
+        if (string.IsNullOrEmpty(host))
+        {
+            return string.Empty;
+        }
+
+        return host.Length > 1 && host[0] == '[' && host[^1] == ']'
+            ? host[1..^1]
+            : host;
+    }
 
     private static string BuildDisplayName(string? fragment, string host, int port)
     {

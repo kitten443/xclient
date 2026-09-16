@@ -116,7 +116,11 @@ public sealed class ShareLinkParserTests
         var profile = ParseOk($"vless://{Uuid}@[2001:db8::1]:443?security=tls#V6");
 
         profile.Port.ShouldBe(443);
-        profile.Address.Trim('[', ']').ShouldBe("2001:db8::1");
+
+        // Brackets are URI syntax, not part of the address: they must be stripped so the value
+        // is usable as an IP literal downstream (notably for Kill Switch allow-listing).
+        profile.Address.ShouldBe("2001:db8::1");
+        profile.ToEndpoint().IsIpLiteral.ShouldBeTrue();
     }
 
     [Fact]

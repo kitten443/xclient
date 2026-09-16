@@ -179,19 +179,18 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # 2. FULL SOLUTION BUILD — tracked gap, non-blocking
+  # 2. FULL SOLUTION BUILD — fast single-OS gate
   # ===========================================================================
-  # This is the job that must become the gate. It is intentionally red until
-  # MyVpn.Service, MyVpn.Cli and MyVpn.UI get an entry point (CS5001).
-  # `continue-on-error` keeps a known-incomplete tree from failing every PR
-  # while still surfacing the failure in the job list. Remove the
-  # `continue-on-error` line — and delete this comment — when the shells land.
+  # `build-test` already builds the solution on five runners; this job exists to
+  # give one fast, unambiguous "the whole solution compiles" signal on Linux
+  # without waiting for the matrix. It is BLOCKING now that the tree builds; it
+  # previously carried `continue-on-error` while MyVpn.Service, MyVpn.Cli and
+  # MyVpn.UI had no entry point and the build failed with three CS5001 errors.
   # ===========================================================================
   full-solution-build:
-    name: Full solution build (tracked gap)
+    name: Full solution build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -251,9 +250,8 @@ jobs:
   # ===========================================================================
   # 4. CODEQL (C#)
   # ===========================================================================
-  # Builds the existing graph for the same reason as build-test (KNOWN GAPS).
-  # Once the solution compiles, replace the explicit project list with
-  # `dotnet build MyVpn.sln -c Release --no-restore`.
+  # The solution builds, so CodeQL analyses the real compilation rather than a
+  # hand-listed subset of projects.
   # ===========================================================================
   codeql:
     name: CodeQL (C#)
@@ -283,27 +281,9 @@ jobs:
       - name: Restore
         run: dotnet restore MyVpn.sln
 
-      - name: Build analyzable projects
+      - name: Build
         shell: bash
-        run: |
-          set -euo pipefail
-          projects=(
-            src/MyVpn.Core/MyVpn.Core.csproj
-            src/MyVpn.Application/MyVpn.Application.csproj
-            src/MyVpn.Infrastructure/MyVpn.Infrastructure.csproj
-            src/MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj
-            src/MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj
-            src/MyVpn.Platform.Windows/MyVpn.Platform.Windows.csproj
-            src/MyVpn.Platform.MacOS/MyVpn.Platform.MacOS.csproj
-            src/MyVpn.Ipc/MyVpn.Ipc.csproj
-            tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj
-            tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj
-            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
-            tests/MyVpn.Integration.Tests/MyVpn.Integration.Tests.csproj
-          )
-          for project in "${projects[@]}"; do
-            dotnet build "$project" -c "$CONFIGURATION" --no-restore
-          done
+        run: dotnet build MyVpn.sln -c "$CONFIGURATION" --no-restore
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
@@ -513,9 +493,10 @@ jobs:
   # Avalonia's XAML/reflection paths and the JSON config model are not
   # trim-analysed yet.
   #
-  # The preflight guard keeps the job green while the head projects are shells
-  # (KNOWN GAPS). It self-activates when src/MyVpn.{UI,Service,Cli}/Program.cs
-  # appear — no workflow edit required.
+  # The preflight guard publishes only when all three head-project entry points
+  # exist; otherwise it emits a loud ::notice:: and skips. The guard is now
+  # satisfied, but it is kept so the job degrades honestly rather than failing
+  # opaquely if an entry point is ever removed.
   # ===========================================================================
   packaging:
     name: Package (${{ matrix.name }})
