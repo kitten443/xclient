@@ -38,3 +38,6 @@ Thumbs.db
 # NuGet
 *.nupkg
 packages/
+
+# Downloaded Xray core used for local verification (not part of the source tree)
+.tools/

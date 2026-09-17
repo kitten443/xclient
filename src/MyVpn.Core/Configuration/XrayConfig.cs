@@ -336,9 +336,17 @@ public sealed record XrayServerEntry
 }
 
 /// <summary>Freedom (direct) outbound settings.</summary>
+/// <remarks>
+/// <b>Do not set <see cref="DomainStrategy"/> here.</b> Xray 26.9.9 reports
+/// <c>The "freedom.domainStrategy" setting is deprecated and will be removed</c> and silently
+/// migrates the value to <c>sockopt.domainStrategy</c>. Put it on the outbound's
+/// <see cref="XraySockoptSettings.DomainStrategy"/> instead. The property is kept so the
+/// deprecation is discoverable rather than looking like an oversight.
+/// </remarks>
 public sealed record XrayFreedomSettings
 {
     /// <summary><c>AsIs</c>, <c>UseIP</c>, <c>UseIPv4</c>, <c>UseIPv6</c>, <c>UseIPIfNonMatch</c>.</summary>
+    [Obsolete("Deprecated by Xray; use XraySockoptSettings.DomainStrategy instead.")]
     [JsonPropertyName("domainStrategy")]
     public string? DomainStrategy { get; init; }
 }
@@ -608,9 +616,25 @@ public sealed record XrayRoutingRule
     [JsonPropertyName("ip")]
     public IReadOnlyList<string>? Ip { get; init; }
 
-    /// <summary>Ports, as strings; ranges use <c>"1000-2000"</c>.</summary>
+    /// <summary>
+    /// Ports to match. Serializes to a JSON <b>string</b> (or number), never an array.
+    /// </summary>
+    /// <remarks>
+    /// Verified against Xray 26.9.9, which was run against a generated config. Xray's
+    /// <c>PortList.UnmarshalJSON</c> in <c>infra/conf/common.go</c> accepts exactly two forms: a
+    /// single JSON number, or a JSON string of comma-separated ports and ranges. An array — the
+    /// obvious shape, and the one the protobuf field name <c>repeated PortRange range = 1</c>
+    /// suggests — is <b>rejected</b> with
+    /// <c>invalid port: [...] &gt; cannot unmarshal array into Go value of type uint32</c>, and
+    /// that failure rejects the whole configuration.
+    /// <para>
+    /// Express multiple entries as a comma-separated string: <c>"80,443,8000-8100"</c>. Note that
+    /// <c>network</c> behaves differently — <c>NetworkList.UnmarshalJSON</c> accepts both an array
+    /// and a comma-separated string — so the two fields are not interchangeable in form.
+    /// </para>
+    /// </remarks>
     [JsonPropertyName("port")]
-    public IReadOnlyList<string>? Port { get; init; }
+    public string? Port { get; init; }
 
     /// <summary><c>tcp</c>, <c>udp</c> or <c>tcp,udp</c>.</summary>
     [JsonPropertyName("network")]

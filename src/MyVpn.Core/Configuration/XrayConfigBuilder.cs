@@ -455,14 +455,15 @@ public static class XrayConfigBuilder
 
         // Freedom must resolve names itself, otherwise direct connections fail for hosts the
         // core only knows by name.
+        //
+        // The strategy goes on sockopt, not on the freedom settings: Xray 26.9.9 warns that
+        // "freedom.domainStrategy" is deprecated and auto-migrates it to "sockopt.domainStrategy".
+        // Emitting the deprecated form still works but produces a warning on every start, which
+        // would train users to ignore core warnings — exactly the wrong habit for a VPN client.
         var direct = new XrayOutbound
         {
             Tag = DirectTag,
             Protocol = "freedom",
-            Settings = new XrayFreedomSettings
-            {
-                DomainStrategy = settings.Connectivity.BindToPhysicalInterface ? "UseIP" : "AsIs",
-            },
             StreamSettings = new XrayStreamSettings
             {
                 Network = "tcp",
@@ -802,7 +803,10 @@ public static class XrayConfigBuilder
             rules.Add(new XrayRoutingRule
             {
                 RuleTag = "myvpn-dns-hijack",
-                Port = new[] { "53" },
+
+                // A single string, not an array: Xray's PortList accepts only a number or a
+                // comma-separated string. See XrayRoutingRule.Port for the verification.
+                Port = "53",
                 Network = "tcp,udp",
                 OutboundTag = DnsOutTag,
             });
@@ -814,7 +818,7 @@ public static class XrayConfigBuilder
             rules.Add(new XrayRoutingRule
             {
                 RuleTag = "myvpn-block-quic",
-                Port = new[] { "443" },
+                Port = "443",
                 Network = "udp",
                 OutboundTag = BlockTag,
             });
@@ -914,7 +918,10 @@ public static class XrayConfigBuilder
                 RuleTag = $"myvpn-custom-{custom.Id}",
                 Domain = custom.Domains.Count > 0 ? custom.Domains : null,
                 Ip = custom.IpCidrs.Count > 0 ? custom.IpCidrs : null,
-                Port = custom.Ports.Count > 0 ? custom.Ports.Select(p => p.ToString()).ToArray() : null,
+                // Comma-separated string, matching Xray's PortList grammar (ranges use "a-b").
+                Port = custom.Ports.Count > 0
+                    ? string.Join(",", custom.Ports.Select(p => p.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                    : null,
                 Network = string.IsNullOrWhiteSpace(custom.Network) ? null : custom.Network,
                 Process = custom.Processes.Count > 0 ? custom.Processes : null,
                 OutboundTag = custom.OutboundTag,

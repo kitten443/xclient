@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using MyVpn.Core.Configuration;
 using MyVpn.Core.Domain;
@@ -542,9 +543,63 @@ public sealed class XrayConfigBuilderTests
         dnsOutbound["protocol"]!.GetValue<string>().ShouldBe("dns");
 
         var hijack = XrayConfigTestFactory.RoutingRule(root, "myvpn-dns-hijack");
-        hijack["port"]!.AsArray().Select(node => node!.GetValue<string>()).ShouldBe(new[] { "53" });
+
+        // A JSON string, NOT an array. Xray's PortList.UnmarshalJSON accepts only a number or a
+        // comma-separated string; an array is rejected with "cannot unmarshal array into Go value
+        // of type uint32" and that rejects the whole configuration. Confirmed by running the real
+        // core (v26.9.9) against a generated config.
+        hijack["port"]!.GetValue<string>().ShouldBe("53");
+        hijack["port"]!.GetValueKind().ShouldBe(JsonValueKind.String);
         hijack["network"]!.GetValue<string>().ShouldBe("tcp,udp");
         hijack["outboundTag"]!.GetValue<string>().ShouldBe(XrayConfigBuilder.DnsOutTag);
+    }
+
+    /// <summary>
+    /// Regression guard for the port-shape defect.
+    /// </summary>
+    /// <remarks>
+    /// Every <c>port</c> in every generated routing rule must serialize to a JSON string or
+    /// number. The natural-looking array form passes unit tests that assert on the model but is
+    /// rejected by the real core, so the assertion is deliberately made against the serialized
+    /// JSON rather than against the strongly-typed object.
+    /// </remarks>
+    [Fact]
+    public void No_routing_rule_ever_serializes_ports_as_an_array()
+    {
+        var settings = new AppSettings
+        {
+            TunnelMode = TunnelMode.SystemProxy,
+            Dns = new DnsSettings { Mode = DnsMode.ThroughTunnel },
+            Routing = new RoutingSettings
+            {
+                BypassLan = true,
+                BlockAds = true,
+                DirectGeoIpCountries = new[] { "ru" },
+                DirectGeoSites = new[] { "cn" },
+                CustomRules = new[]
+                {
+                    new CustomRoutingRule { Ports = new[] { 8080, 8443 }, Proxy = true },
+                },
+            },
+        };
+
+        var result = XrayConfigTestFactory.BuildOk(XrayConfigTestFactory.Request(settings: settings));
+        var root = XrayConfigTestFactory.Root(result);
+
+        var rules = root["routing"]!["rules"]!.AsArray();
+        rules.Count.ShouldBeGreaterThan(0);
+
+        foreach (var rule in rules)
+        {
+            if (rule!["port"] is { } port)
+            {
+                port.GetValueKind().ShouldBeOneOf(JsonValueKind.String, JsonValueKind.Number);
+            }
+        }
+
+        // The custom rule with two ports must become a comma-separated string.
+        var custom = XrayConfigTestFactory.RoutingRule(root, "myvpn-custom-" + settings.Routing.CustomRules[0].Id);
+        custom["port"]!.GetValue<string>().ShouldBe("8080,8443");
     }
 
     [Fact]
