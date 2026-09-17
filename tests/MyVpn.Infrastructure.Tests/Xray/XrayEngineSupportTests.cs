@@ -30,6 +30,18 @@ public sealed class XrayBinaryLocatorTests
     /// </summary>
     private static string Resolved(string path) => Path.GetFullPath(path);
 
+    /// <summary>
+    /// The key the locator will test an explicit selection under.
+    /// </summary>
+    /// <remarks>
+    /// The locator normalises a user-selected path with <see cref="Path.GetFullPath"/> <em>before</em>
+    /// checking whether it exists, while the convention paths are combined and tested as-is. On Linux
+    /// the two forms coincide, so a fixture keyed on the raw string passes there and fails on Windows,
+    /// where normalisation adds the current drive letter. This helper exists so that asymmetry is
+    /// stated in one place instead of being rediscovered by a CI run.
+    /// </remarks>
+    private static string SelectedKey(string path) => Path.GetFullPath(path);
+
     private static ResultLike Locate(
         string? userPath,
         string baseDir,
@@ -118,10 +130,29 @@ public sealed class XrayBinaryLocatorTests
         // conventional name -- so it reported "no core binary at the selected path" for a path the
         // user could see in their file manager. Asserted with a name no convention would produce.
         var renamed = Bin(Dir("/custom"), isWindows: false) + "-26.9.9";
-        var result = Locate(renamed, "/app", new[] { renamed, Bin(Dir("/app", "xray")) });
+        var result = Locate(renamed, "/app", new[] { SelectedKey(renamed), Bin(Dir("/app", "xray")) });
 
         result.IsSuccess.ShouldBeTrue();
         result.Path.ShouldBe(Resolved(renamed));
+    }
+
+    [Fact]
+    public void NormalisesTheSelectedPathBeforeTestingItForExistence()
+    {
+        // This is the behaviour the two fixtures above depend on, pinned directly so it cannot be
+        // removed silently. A path containing `..` is the only portable way to show the difference:
+        // the messy and canonical strings are different, and the fixture is keyed on the canonical
+        // one, so the lookup can only succeed if the locator normalises first. On Windows the same
+        // normalisation is what adds the drive letter.
+        var messy = Path.Combine(Dir("/custom", "nested", ".."), "xray-26.9.9");
+        var canonical = Path.GetFullPath(messy);
+
+        canonical.ShouldNotBe(messy, "the two forms must differ or this test proves nothing");
+
+        var result = Locate(messy, "/app", new[] { canonical });
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Path.ShouldBe(canonical);
     }
 
     [Fact]
@@ -139,11 +170,15 @@ public sealed class XrayBinaryLocatorTests
     public void ReportsAnExplicitlySelectedCoreThatIsNotExecutable()
     {
         var stripped = Bin(Dir("/custom"), isWindows: false) + "-26.9.9";
-        var result = Locate(stripped, "/app", new[] { stripped }, nonExecutable: new[] { stripped });
+        var result = Locate(
+            stripped,
+            "/app",
+            new[] { SelectedKey(stripped) },
+            nonExecutable: new[] { SelectedKey(stripped) });
 
         result.IsSuccess.ShouldBeFalse();
         result.Error!.Code.ShouldBe(MyVpn.Core.Results.ErrorCodes.XrayBinaryNotExecutable);
-        result.Error.Arguments["path"].ShouldBe(stripped);
+        result.Error.Arguments["path"].ShouldBe(SelectedKey(stripped));
     }
 
     [Fact]
