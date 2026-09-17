@@ -76,7 +76,7 @@ public sealed class SubscriptionFetcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        if (!UrlSafety.IsSafeHttpUrl(url, settings.AllowInsecureHttp, out var reason))
+        if (!UrlSafety.IsSafeHttpUrl(url, settings.AllowInsecureHttp, out var reason, settings.AllowPrivateAddresses))
         {
             return Result<SubscriptionFetchResult>.Fail(new MyVpnError(
                 ErrorCodes.SubscriptionUrlInvalid,
@@ -115,7 +115,7 @@ public sealed class SubscriptionFetcher : IDisposable
 
             // Re-check the final URL: a redirect may have moved us somewhere we would have refused.
             var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? url;
-            if (!UrlSafety.IsSafeHttpUrl(finalUrl, settings.AllowInsecureHttp, out var hopReason))
+            if (!UrlSafety.IsSafeHttpUrl(finalUrl, settings.AllowInsecureHttp, out var hopReason, settings.AllowPrivateAddresses))
             {
                 return Result<SubscriptionFetchResult>.Fail(new MyVpnError(
                     ErrorCodes.SubscriptionUrlInvalid,

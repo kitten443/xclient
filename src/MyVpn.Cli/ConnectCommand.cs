@@ -63,6 +63,16 @@ internal static class ConnectCommand
         {
             TunnelMode = mode,
             KillSwitch = killSwitchMode,
+
+            // Plain HTTP for a subscription is allowed only when explicitly requested. It is a
+            // real use case -- a self-hosted panel on a LAN -- but it is also how a subscription
+            // URL and the credentials it carries end up readable in transit, so it is never a
+            // default and never silent.
+            Subscriptions = new SubscriptionSettings
+            {
+                AllowInsecureHttp = args.Contains("--allow-http", StringComparer.OrdinalIgnoreCase),
+                AllowPrivateAddresses = args.Contains("--allow-private-subscription", StringComparer.OrdinalIgnoreCase),
+            },
             Dns = new DnsSettings { Mode = DnsMode.ThroughTunnel },
             Routing = new RoutingSettings { BypassLan = true },
             Proxy = new ProxySettings { ListenPort = 10808, EnableSocks = true, EnableHttp = true },

@@ -932,6 +932,17 @@ public sealed record SubscriptionSettings
     /// <summary>Allow subscription URLs over plain HTTP. Off by default.</summary>
     public bool AllowInsecureHttp { get; init; }
 
+    /// <summary>
+    /// Allow a subscription URL that resolves to a loopback or private address.
+    /// </summary>
+    /// <remarks>
+    /// Off by default: a subscription response is attacker-influenced, and a URL pointing at
+    /// <c>127.0.0.1</c> or a cloud metadata endpoint is the classic server-side request forgery.
+    /// The legitimate case is a self-hosted panel on the same machine or a LAN, which is why this
+    /// is an explicit opt-in rather than a hard refusal.
+    /// </remarks>
+    public bool AllowPrivateAddresses { get; init; }
+
     /// <summary>Time to wait for a subscription response.</summary>
     public int TimeoutSeconds { get; init; } = 30;
 

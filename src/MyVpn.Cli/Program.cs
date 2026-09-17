@@ -74,6 +74,10 @@ internal static class Program
         Console.WriteLine("      --core PATH          Path to the Xray core binary.");
         Console.WriteLine("      --system-proxy       Also point the desktop at the tunnel (GSettings).");
         Console.WriteLine("      --kill-switch MODE   off | on-demand | always-on (needs root).");
+        Console.WriteLine("      --allow-http         Permit a plain-HTTP subscription URL (self-hosted/LAN).");
+        Console.WriteLine("      --allow-private-subscription");
+        Console.WriteLine("                           Permit a subscription URL on loopback/a private address.");
+        Console.WriteLine("                           Off by default: that is the classic SSRF shape.");
         Console.WriteLine("  myvpn help                    Show this help.");
         Console.WriteLine();
         Console.WriteLine("Geo data must be reachable through an ABSOLUTE path; see ADR-0003.");

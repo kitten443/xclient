@@ -62,7 +62,19 @@ public static class UrlSafety
     /// When false, only <c>https</c> is accepted. Subscription URLs default to HTTPS-only.
     /// </param>
     /// <param name="reason">Machine-readable rejection reason.</param>
-    public static bool IsSafeHttpUrl(string? url, bool allowInsecureHttp, out UrlRejectionReason reason)
+    /// <param name="allowPrivateAddresses">
+    /// Permits loopback, private and link-local destinations. Off by default because a
+    /// subscription response is attacker-influenced input and a link pointing at
+    /// <c>127.0.0.1</c> or a cloud metadata address is the classic SSRF. It exists as an explicit
+    /// opt-in for the legitimate case of a self-hosted panel on the same machine or on a LAN, and
+    /// it relaxes only the address class — the scheme, credential and control-character rules
+    /// still apply.
+    /// </param>
+    public static bool IsSafeHttpUrl(
+        string? url,
+        bool allowInsecureHttp,
+        out UrlRejectionReason reason,
+        bool allowPrivateAddresses = false)
     {
         reason = UrlRejectionReason.None;
 
@@ -115,7 +127,13 @@ public static class UrlSafety
 
         if (IPAddress.TryParse(uri.Host, out var ip))
         {
-            return IsAddressAllowed(ip, out reason);
+            return allowPrivateAddresses || IsAddressAllowed(ip, out reason);
+        }
+
+        // A host name that is itself loopback-ish is still refused unless the caller opted in.
+        if (allowPrivateAddresses)
+        {
+            return true;
         }
 
         return true;
