@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MyVpn.Platform.Linux.Execution;
+namespace MyVpn.Platform.Abstractions.Execution;
 
 /// <summary>Outcome of a platform command.</summary>
 public sealed record CommandResult(int ExitCode, string StandardOutput, string StandardError)
@@ -123,8 +123,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
             return File.Exists(fileName);
         }
 
+        // Path.PathSeparator, not a hardcoded ':' -- on Windows the separator is ';' and a
+        // Unix-only split would silently find nothing.
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                     .Split(':', StringSplitOptions.RemoveEmptyEntries))
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             if (File.Exists(Path.Combine(directory, fileName)))
             {
@@ -132,11 +134,20 @@ public sealed class ProcessCommandRunner : ICommandRunner
             }
         }
 
-        // Tools invoked through pkexec or a system service may run with a minimal PATH, so the
-        // conventional locations are checked explicitly.
+        // A process started by a service or an elevated launcher frequently runs with a minimal
+        // PATH, so the conventional locations are checked explicitly per platform.
+        if (OperatingSystem.IsWindows())
+        {
+            var system32 = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), fileName);
+
+            return File.Exists(system32);
+        }
+
         return File.Exists($"/usr/sbin/{fileName}")
                || File.Exists($"/usr/bin/{fileName}")
                || File.Exists($"/sbin/{fileName}")
-               || File.Exists($"/bin/{fileName}");
+               || File.Exists($"/bin/{fileName}")
+               || File.Exists($"/sbin/{fileName}");
     }
 }

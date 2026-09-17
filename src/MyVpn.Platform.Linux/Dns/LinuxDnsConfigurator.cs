@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.Dns;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 
 namespace MyVpn.Platform.Linux.Dns;
 

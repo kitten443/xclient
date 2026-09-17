@@ -1,7 +1,7 @@
 using MyVpn.Core.Net;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.Routing;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 using MyVpn.Platform.Linux.Routing;
 using Shouldly;
 using Xunit;

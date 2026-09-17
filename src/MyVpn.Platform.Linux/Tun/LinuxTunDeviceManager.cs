@@ -1,7 +1,7 @@
 using System.Text;
 using MyVpn.Core.Net;
 using MyVpn.Platform.Abstractions.Platform;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 
 namespace MyVpn.Platform.Linux.Tun;
 

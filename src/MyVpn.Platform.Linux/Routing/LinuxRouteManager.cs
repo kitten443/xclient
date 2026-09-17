@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using MyVpn.Core.Net;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.Routing;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 
 namespace MyVpn.Platform.Linux.Routing;
 

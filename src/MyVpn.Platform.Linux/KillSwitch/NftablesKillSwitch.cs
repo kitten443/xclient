@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using MyVpn.Core.Domain;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.KillSwitch;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 
 namespace MyVpn.Platform.Linux.KillSwitch;
 

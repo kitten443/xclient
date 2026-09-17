@@ -2,7 +2,7 @@ using System.Net;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.Dns;
 using MyVpn.Platform.Linux.Dns;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;

@@ -3,7 +3,7 @@ using MyVpn.Core.Net;
 using MyVpn.Core.Results;
 using MyVpn.Platform.Abstractions.KillSwitch;
 using MyVpn.Platform.Abstractions.Proxy;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 using MyVpn.Platform.Linux.KillSwitch;
 using MyVpn.Platform.Linux.Proxy;
 using Shouldly;

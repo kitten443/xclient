@@ -4,7 +4,7 @@ using MyVpn.Platform.Abstractions.KillSwitch;
 using MyVpn.Platform.Abstractions.Platform;
 using MyVpn.Platform.Abstractions.Proxy;
 using MyVpn.Platform.Abstractions.Routing;
-using MyVpn.Platform.Linux.Execution;
+using MyVpn.Platform.Abstractions.Execution;
 using MyVpn.Platform.Linux.Network;
 using MyVpn.Platform.Linux.Tun;
 using Shouldly;
