@@ -6,8 +6,30 @@ using Xunit;
 namespace MyVpn.Infrastructure.Tests.Xray;
 
 /// <summary>Tests for core binary discovery.</summary>
+/// <remarks>
+/// The locator searches <em>directories</em> and joins the platform binary name onto each one with
+/// <see cref="Path.Combine"/>, which uses the host's separator. These tests therefore build every
+/// fixture path the same way instead of writing POSIX paths as literals: a hard-coded
+/// <c>"/app/xray/xray"</c> compiles and passes on Linux but never matches on Windows, where the
+/// locator correctly produces <c>\app\xray\xray</c>. The failure that produced was misleading —
+/// four tests reporting "binary not found" for a locator that was working exactly as designed —
+/// so the expectations are now separator-agnostic by construction rather than by luck.
+/// </remarks>
 public sealed class XrayBinaryLocatorTests
 {
+    /// <summary>A directory, built the way the locator builds its search list.</summary>
+    private static string Dir(params string[] parts) => Path.Combine(parts);
+
+    /// <summary>The core file inside a directory, named the way the locator names it.</summary>
+    private static string Bin(string directory, bool isWindows = false) =>
+        Path.Combine(directory, XrayBinaryLocator.BinaryName(isWindows));
+
+    /// <summary>
+    /// What <c>Locate</c> reports for a candidate: it returns an absolute path, so a comparison
+    /// against a relative or partially-rooted literal would be a different string on Windows.
+    /// </summary>
+    private static string Resolved(string path) => Path.GetFullPath(path);
+
     private static ResultLike Locate(
         string? userPath,
         string baseDir,
@@ -34,36 +56,42 @@ public sealed class XrayBinaryLocatorTests
     [Fact]
     public void FindsABundledCoreBeforeTheSystemPath()
     {
-        var result = Locate(null, "/app", new[] { "/app/xray/xray", "/usr/bin/xray" });
+        var bundled = Bin(Dir("/app", "xray"));
+        var result = Locate(null, "/app", new[] { bundled, Bin("/usr/bin") });
 
         result.IsSuccess.ShouldBeTrue();
-        result.Path.ShouldBe("/app/xray/xray");
+        result.Path.ShouldBe(Resolved(bundled));
     }
 
     [Fact]
     public void PrefersTheUserSelectedCoreOverTheBundledOne()
     {
-        var result = Locate("/custom/xray", "/app", new[] { "/app/xray/xray", "/custom/xray" });
+        var selected = Bin("/custom");
+        var result = Locate(selected, "/app", new[] { Bin(Dir("/app", "xray")), selected });
 
         result.IsSuccess.ShouldBeTrue();
-        result.Path.ShouldBe("/custom/xray");
+        result.Path.ShouldBe(Resolved(selected));
     }
 
     [Fact]
     public void FallsBackToTheSystemPathWhenNothingIsBundled()
     {
-        var result = Locate(null, "/app", new[] { "/usr/bin/xray" });
+        var system = Bin("/usr/bin");
+        var result = Locate(null, "/app", new[] { system });
 
         result.IsSuccess.ShouldBeTrue();
-        result.Path.ShouldBe("/usr/bin/xray");
+        result.Path.ShouldBe(Resolved(system));
     }
 
     [Fact]
     public void ReportsNotExecutableRatherThanNotPermitted()
     {
         // The binary exists but lost its executable bit, which is what happens when a tarball is
-        // extracted without permissions preserved.
-        var result = Locate(null, "/app", new[] { "/app/xray/xray" }, nonExecutable: new[] { "/app/xray/xray" });
+        // extracted without permissions preserved. The predicate is injected, so this exercises the
+        // locator's ordering and diagnosis on any host; production passes null on Windows, where
+        // the executable bit does not exist.
+        var stripped = Bin(Dir("/app", "xray"));
+        var result = Locate(null, "/app", new[] { stripped }, nonExecutable: new[] { stripped });
 
         result.IsSuccess.ShouldBeFalse();
         result.Error!.Code.ShouldBe(MyVpn.Core.Results.ErrorCodes.XrayBinaryNotExecutable);
