@@ -358,5 +358,11 @@
   "error.route.journal_write_failed": "无法保存原始路由记录，因此已拒绝更改。",
   "error.tun.macos_missing": "未找到隧道接口。",
   "route.reason.bypass": "使 VPN 自身到服务器的连接不进入隧道。",
-  "route.reason.tunnel": "将流量送入隧道。"
+  "route.reason.tunnel": "将流量送入隧道。",
+  "platform.limitation.system_proxy_is_advisory": "系统代理只是通知机制，而非安全边界：忽略它的应用完全不会被重定向。要做到这一点请使用 TUN 模式。",
+  "platform.limitation.dns_backend_varies_by_distro": "各发行版的 DNS 机制不同：Debian 默认不安装 systemd-resolved，Arch 默认不启用。因此 MyVpn 在运行时检测解析器，而不是假定其一。",
+  "platform.limitation.process_routing_block_only": "在 Windows 上，可以阻止应用使用隧道，但无法将其重定向进隧道：重定向需要内核态驱动，MyVpn 不附带此类驱动。",
+  "platform.limitation.pf_not_api": "Apple 声明包过滤器不是受支持的 API，并建议改用 Network Extension。因此这里的网络锁目前可用，但不提供兼容性保证。",
+  "platform.limitation.process_routing_uid_only": "在 macOS 上，自行分发的客户端无法实现按应用路由。仅支持按用户账户进行阻止。",
+  "platform.limitation.utun_name_dynamic": "macOS 动态分配隧道接口编号，因此接口在运行时解析，而非预先固定。"
 }

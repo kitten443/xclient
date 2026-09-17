@@ -441,5 +441,11 @@
   "error.route.journal_write_failed": "The record of the original routes could not be saved, so the change was refused.",
   "error.tun.macos_missing": "The tunnel interface was not found.",
   "route.reason.bypass": "Keeps the VPN's own connection to the server off the tunnel.",
-  "route.reason.tunnel": "Carries traffic into the tunnel."
+  "route.reason.tunnel": "Carries traffic into the tunnel.",
+  "platform.limitation.system_proxy_is_advisory": "The system proxy is a notification, not a security boundary: applications that ignore it are not redirected at all. Use TUN mode for that.",
+  "platform.limitation.dns_backend_varies_by_distro": "The DNS mechanism differs between distributions: systemd-resolved is not installed by default on Debian and is not enabled by default on Arch, so MyVpn detects the resolver at runtime instead of assuming one.",
+  "platform.limitation.process_routing_block_only": "On Windows, applications can be blocked from the tunnel but not redirected into it: redirection needs a kernel-mode driver, which MyVpn does not ship.",
+  "platform.limitation.pf_not_api": "Apple states that the packet filter is not a supported API and recommends Network Extension instead, so the Kill Switch here works today but carries no compatibility guarantee.",
+  "platform.limitation.process_routing_uid_only": "On macOS, per-application tunnelling is not achievable for a self-distributed client. Only blocking by user account is available.",
+  "platform.limitation.utun_name_dynamic": "macOS assigns tunnel interface numbers dynamically, so the interface is resolved at run time rather than fixed in advance."
 }
