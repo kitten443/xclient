@@ -194,5 +194,21 @@
   "error.process.name_invalid": "Некорректное имя приложения в списке маршрутизации.",
   "error.process.path_not_absolute": "Путь к приложению должен быть абсолютным.",
   "error.process.selector_unsupported": "Такой способ выбора приложения не поддерживается.",
-  "error.process.unsupported_on_platform": "Маршрутизация по приложениям не поддерживается полностью на этой системе."
+  "error.process.unsupported_on_platform": "Маршрутизация по приложениям не поддерживается полностью на этой системе.",
+  "error.killswitch.not_available": "Для этой системы нет реализации блокировки сети. Туннель будет работать без неё.",
+  "error.killswitch.needs_privileges": "Для блокировки сети нужны права администратора. Установите службу MyVpn или запустите привилегированную службу.",
+  "error.killswitch.install_nftables": "nftables не установлен, поэтому блокировку сети применить нельзя.",
+  "error.proxy.not_available": "Выбран режим системного прокси, но в этом окружении нет средства настройки. Укажите локальный прокси в приложениях вручную.",
+  "error.proxy.verification_failed": "Системный прокси записан, но не читается обратно корректно.",
+  "error.session.verification_failed": "Туннель запущен, но запрос через него не прошёл. Проверьте профиль или выберите другой сервер.",
+  "error.session.exit_matches_direct": "Трафик уходит через обычное подключение, а не через туннель.",
+  "error.session.cannot_connect_from_state": "Нельзя начать подключение в текущем состоянии.",
+  "error.session.busy": "Другая операция подключения уже выполняется.",
+  "privilege.install_helper": "Установить службу",
+  "network.restore": "Восстановить сеть",
+  "killswitch.install_nftables": "Установить nftables",
+  "error.subscription.http_error": "Сервер подписки вернул ошибку.",
+  "error.subscription.url_insecure": "Ссылка на подписку должна использовать HTTPS.",
+  "subscription.fix_url": "Проверить ссылку подписки",
+  "subscription.retry": "Обновить подписку ещё раз"
 }

@@ -11,6 +11,8 @@ using MyVpn.Infrastructure.Geo;
 using MyVpn.Infrastructure.Net;
 using MyVpn.Infrastructure.Subscriptions;
 using MyVpn.Infrastructure.Xray;
+using MyVpn.Platform.Linux.KillSwitch;
+using MyVpn.Platform.Linux.Proxy;
 
 namespace MyVpn.Cli;
 
@@ -48,9 +50,17 @@ internal static class ConnectCommand
         var paths = new AppPaths();
         paths.EnsureCreated();
 
+        var killSwitchMode = (ReadOption(args, "--kill-switch") ?? "off").ToLowerInvariant() switch
+        {
+            "on-demand" or "ondemand" => KillSwitchMode.OnDemand,
+            "always-on" or "alwayson" => KillSwitchMode.AlwaysOn,
+            _ => KillSwitchMode.Disabled,
+        };
+
         var settings = new AppSettings
         {
             TunnelMode = mode,
+            KillSwitch = killSwitchMode,
             Dns = new DnsSettings { Mode = DnsMode.ThroughTunnel },
             Routing = new RoutingSettings { BypassLan = true },
             Proxy = new ProxySettings { ListenPort = 10808, EnableSocks = true, EnableHttp = true },
@@ -148,9 +158,14 @@ internal static class ConnectCommand
             new DnsServerEndpointResolver(),
             new HttpProxyConnectionVerifier(),
 
-            // No kill-switch executor exists yet, so the session will report that honestly rather
-            // than silently pretending the protection is in place.
-            killSwitch: null,
+            // Both executors are real. The Kill Switch reports "not available" when the process is
+            // not elevated, which is the honest answer rather than a false claim of protection; the
+            // system proxy applies only with --system-proxy, because pointing a desktop at a tunnel
+            // is a side effect that should never happen as a surprise.
+            killSwitch: new NftablesKillSwitch(),
+            systemProxy: args.Contains("--system-proxy", StringComparer.OrdinalIgnoreCase)
+                ? new LinuxSystemProxy()
+                : null,
             loggerFactory.CreateLogger<VpnSession>());
 
         session.SnapshotChanged += (_, snapshot) =>

@@ -194,5 +194,21 @@
   "error.process.name_invalid": "路由列表中的应用名称无效。",
   "error.process.path_not_absolute": "应用路径必须是绝对路径。",
   "error.process.selector_unsupported": "不支持这种选择应用的方式。",
-  "error.process.unsupported_on_platform": "此系统不完全支持按应用路由。"
+  "error.process.unsupported_on_platform": "此系统不完全支持按应用路由。",
+  "error.killswitch.not_available": "此系统没有网络锁实现，隧道将在没有它的情况下运行。",
+  "error.killswitch.needs_privileges": "网络锁需要管理员权限。请安装 MyVpn 服务，或启动特权服务。",
+  "error.killswitch.install_nftables": "未安装 nftables，无法应用网络锁。",
+  "error.proxy.not_available": "已选择系统代理模式，但此环境没有代理配置工具。请手动在应用中指定本地代理。",
+  "error.proxy.verification_failed": "系统代理已写入，但读回不正确。",
+  "error.session.verification_failed": "隧道已启动，但请求未能通过。请检查配置或更换服务器。",
+  "error.session.exit_matches_direct": "流量走的是普通连接，而不是隧道。",
+  "error.session.cannot_connect_from_state": "当前状态下无法开始连接。",
+  "error.session.busy": "另一个连接操作正在进行中。",
+  "privilege.install_helper": "安装服务",
+  "network.restore": "恢复网络",
+  "killswitch.install_nftables": "安装 nftables",
+  "error.subscription.http_error": "订阅服务器返回错误。",
+  "error.subscription.url_insecure": "订阅链接必须使用 HTTPS。",
+  "subscription.fix_url": "检查订阅链接",
+  "subscription.retry": "重新更新订阅"
 }

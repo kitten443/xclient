@@ -7,6 +7,7 @@ using MyVpn.Core.Results;
 using MyVpn.Core.Settings;
 using MyVpn.Core.Xray;
 using MyVpn.Platform.Abstractions.KillSwitch;
+using MyVpn.Platform.Abstractions.Proxy;
 
 namespace MyVpn.Application.Connection;
 
@@ -110,11 +111,13 @@ public sealed class VpnSession : IVpnSession
     private readonly IServerEndpointResolver _resolver;
     private readonly IConnectionVerifier _verifier;
     private readonly IKillSwitch? _killSwitch;
+    private readonly ISystemProxy? _systemProxy;
     private readonly ILogger<VpnSession> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private ConnectionSnapshot _snapshot;
     private KillSwitchPlan? _armedPlan;
+    private SystemProxySnapshot? _proxySnapshot;
 
     public VpnSession(
         VpnStateMachine stateMachine,
@@ -126,6 +129,7 @@ public sealed class VpnSession : IVpnSession
         IServerEndpointResolver resolver,
         IConnectionVerifier verifier,
         IKillSwitch? killSwitch,
+        ISystemProxy? systemProxy,
         ILogger<VpnSession> logger)
     {
         _stateMachine = stateMachine ?? throw new ArgumentNullException(nameof(stateMachine));
@@ -137,6 +141,7 @@ public sealed class VpnSession : IVpnSession
         _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
         _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
         _killSwitch = killSwitch;
+        _systemProxy = systemProxy;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _snapshot = new ConnectionSnapshot { State = _stateMachine.Current };
@@ -408,6 +413,18 @@ public sealed class VpnSession : IVpnSession
         _snapshot = _snapshot with { CoreProcessId = coreStatus.ProcessId };
         RaiseSnapshot();
 
+        // ---- 7b. point the desktop at the tunnel --------------------------------
+        var proxyResult = await ApplySystemProxyAsync(settings, warnings, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (proxyResult.IsFailure)
+        {
+            await RollbackAsync(disarmKillSwitch: true, stopCore: true, deleteConfig: true,
+                cancellationToken: cancellationToken, restoreProxy: true).ConfigureAwait(false);
+
+            return Fail(proxyResult.Error!, warnings);
+        }
+
         // ---- 8. verify with real traffic ---------------------------------------
         ConnectionVerification? verification = null;
 
@@ -479,8 +496,8 @@ public sealed class VpnSession : IVpnSession
 
             _stateMachine.TryTransitionTo(VpnConnectionState.Disconnecting, "user-disconnect");
 
-            await RollbackAsync(disarmKillSwitch: true, stopCore: true, deleteConfig: true, cancellationToken)
-                .ConfigureAwait(false);
+            await RollbackAsync(disarmKillSwitch: true, stopCore: true, deleteConfig: true,
+                cancellationToken, restoreProxy: true).ConfigureAwait(false);
 
             _stateMachine.TryTransitionTo(VpnConnectionState.Disconnected, "disconnected");
 
@@ -504,6 +521,85 @@ public sealed class VpnSession : IVpnSession
 
     // ------------------------------------------------------------------ helpers
 
+    /// <summary>
+    /// Points the desktop at the local listener.
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful in <see cref="TunnelMode.SystemProxy"/>. On Linux this is a GSettings
+    /// notification that well-behaved applications honour and others ignore entirely, so it is
+    /// never treated as leak protection — that is the Kill Switch's job. When no configurator is
+    /// available the session warns and continues, because the local listener still works for any
+    /// application the user points at it by hand.
+    /// </remarks>
+    private async Task<Result> ApplySystemProxyAsync(
+        AppSettings settings,
+        ICollection<MyVpnError> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (settings.TunnelMode != TunnelMode.SystemProxy)
+        {
+            return Result.Ok();
+        }
+
+        if (_systemProxy is null || !_systemProxy.IsSupported)
+        {
+            warnings.Add(new MyVpnError(
+                ErrorCodes.SystemProxySetFailed,
+                "error.proxy.not_available",
+                ErrorSeverity.Warning,
+                "System-proxy mode was selected but this environment has no proxy configurator. "
+                + "The tunnel is up; point applications at the local SOCKS/HTTP listener explicitly."));
+
+            return Result.Ok();
+        }
+
+        var captured = await _systemProxy.CaptureAsync(cancellationToken).ConfigureAwait(false);
+        if (captured.IsFailure)
+        {
+            return Result.Fail(captured.Error!);
+        }
+
+        _proxySnapshot = captured.Value;
+
+        var plan = new SystemProxyPlan
+        {
+            SocksPort = settings.Proxy.ListenPort,
+            HttpPort = settings.Proxy.EffectiveHttpPort,
+            EnableSocks = settings.Proxy.EnableSocks,
+            EnableHttp = settings.Proxy.EnableHttp,
+            UsePac = settings.Proxy.UsePac,
+            PacUrl = settings.Proxy.CustomPacUrl,
+            BypassDomains = settings.Proxy.BypassDomains,
+            Previous = captured.Value,
+        };
+
+        var validation = plan.Validate();
+        if (validation.IsFailure)
+        {
+            return validation;
+        }
+
+        var applied = await _systemProxy.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+        if (applied.IsFailure)
+        {
+            return applied;
+        }
+
+        // Read back rather than trusting the write.
+        var state = await _systemProxy.InspectAsync(cancellationToken).ConfigureAwait(false);
+        if (!state.PointsAtMyVpn)
+        {
+            return Result.Fail(new MyVpnError(
+                ErrorCodes.SystemProxySetFailed,
+                "error.proxy.verification_failed",
+                ErrorSeverity.Error,
+                $"The system proxy was written but reads back as '{state.ActiveProxy ?? "none"}'."));
+        }
+
+        _logger.LogInformation("System proxy configured to {Proxy}.", state.ActiveProxy);
+        return Result.Ok();
+    }
+
     private async Task<Result> ArmKillSwitchAsync(
         AppSettings settings,
         ServerProfile profile,
@@ -517,17 +613,39 @@ public sealed class VpnSession : IVpnSession
             return Result.Ok();
         }
 
-        if (_killSwitch is null || !_killSwitch.IsSupported)
+        if (_killSwitch is null)
         {
-            // No executor for this platform or build. Report it loudly rather than silently
+            // No executor exists for this platform or build. Report it loudly rather than silently
             // connecting without the protection the user selected.
             warnings.Add(new MyVpnError(
                 ErrorCodes.KillSwitchApplyFailed,
                 "error.killswitch.not_available",
                 ErrorSeverity.Warning,
-                "No Kill Switch implementation is available in this build; connecting without it."));
+                "No Kill Switch implementation is available for this platform; connecting without it."));
 
-            _logger.LogWarning("Kill Switch requested but no implementation is available.");
+            _logger.LogWarning("Kill Switch requested but no implementation exists for this platform.");
+            return Result.Ok();
+        }
+
+        if (!_killSwitch.IsSupported)
+        {
+            // The implementation exists but cannot act here — almost always because the process is
+            // not privileged. Saying "no implementation in this build" would be actively
+            // misleading and would send the user looking for a rebuild instead of installing the
+            // helper, so the two cases are reported separately.
+            warnings.Add(new MyVpnError(
+                ErrorCodes.PrivilegeDenied,
+                "error.killswitch.needs_privileges",
+                ErrorSeverity.Warning,
+                $"The {_killSwitch.MechanismName} Kill Switch is present but cannot be applied "
+                + "without administrative privileges. Install the MyVpn helper, or run the "
+                + "privileged service. Connecting without the protection you selected.",
+                "privilege.install_helper"));
+
+            _logger.LogWarning(
+                "Kill Switch requested but {Mechanism} cannot act without privileges.",
+                _killSwitch.MechanismName);
+
             return Result.Ok();
         }
 
@@ -584,10 +702,28 @@ public sealed class VpnSession : IVpnSession
         bool disarmKillSwitch,
         bool stopCore,
         bool deleteConfig,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool restoreProxy = false)
     {
         // Every step is attempted even if an earlier one fails: a cleanup that stops at the first
         // error is exactly the situation the user is trying to escape.
+
+        // The desktop proxy is restored FIRST. Leaving it pointing at a listener that is about to
+        // be torn down is a reboot-surviving blackhole: the machine would keep sending traffic to
+        // a port nothing is listening on.
+        if (restoreProxy && _proxySnapshot is not null && _systemProxy is not null)
+        {
+            var restored = await _systemProxy.RestoreAsync(_proxySnapshot, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (restored.IsFailure)
+            {
+                _logger.LogError("Failed to restore the system proxy during rollback: {Error}", restored.Error);
+            }
+
+            _proxySnapshot = null;
+        }
+
         if (stopCore && _core.State != CoreState.Stopped)
         {
             var stopped = await _core.StopAsync(cancellationToken).ConfigureAwait(false);

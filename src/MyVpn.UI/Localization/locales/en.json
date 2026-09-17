@@ -194,5 +194,21 @@
   "error.process.name_invalid": "An application name in the routing list is invalid.",
   "error.process.path_not_absolute": "An application path must be absolute.",
   "error.process.selector_unsupported": "This way of selecting an application is not supported.",
-  "error.process.unsupported_on_platform": "Per-app routing is not fully supported on this platform."
+  "error.process.unsupported_on_platform": "Per-app routing is not fully supported on this platform.",
+  "error.killswitch.not_available": "No Kill Switch implementation exists for this platform. The tunnel will run without it.",
+  "error.killswitch.needs_privileges": "The Kill Switch needs administrative privileges. Install the MyVpn helper, or start the privileged service.",
+  "error.killswitch.install_nftables": "nftables is not installed; the Kill Switch cannot be applied.",
+  "error.proxy.not_available": "System-proxy mode was selected, but this environment has no proxy configurator. Point applications at the local listener manually.",
+  "error.proxy.verification_failed": "The system proxy was written but does not read back correctly.",
+  "error.session.verification_failed": "The tunnel is running but did not carry a request. Check the profile and try another server.",
+  "error.session.exit_matches_direct": "Traffic is leaving through your normal connection, not the tunnel.",
+  "error.session.cannot_connect_from_state": "Cannot start a connection in the current state.",
+  "error.session.busy": "Another connection operation is already running.",
+  "privilege.install_helper": "Install the helper",
+  "network.restore": "Restore network",
+  "killswitch.install_nftables": "Install nftables",
+  "error.subscription.http_error": "The subscription server returned an error.",
+  "error.subscription.url_insecure": "Subscription URLs must use HTTPS.",
+  "subscription.fix_url": "Check the subscription URL",
+  "subscription.retry": "Update the subscription again"
 }

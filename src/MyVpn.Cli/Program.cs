@@ -72,6 +72,8 @@ internal static class Program
         Console.WriteLine("      --mode proxy|tun     Tunnel mode (default proxy).");
         Console.WriteLine("      --hold SECONDS       Stay connected before disconnecting.");
         Console.WriteLine("      --core PATH          Path to the Xray core binary.");
+        Console.WriteLine("      --system-proxy       Also point the desktop at the tunnel (GSettings).");
+        Console.WriteLine("      --kill-switch MODE   off | on-demand | always-on (needs root).");
         Console.WriteLine("  myvpn help                    Show this help.");
         Console.WriteLine();
         Console.WriteLine("Geo data must be reachable through an ABSOLUTE path; see ADR-0003.");

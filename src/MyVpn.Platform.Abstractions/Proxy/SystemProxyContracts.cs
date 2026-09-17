@@ -64,8 +64,17 @@ public sealed record SystemProxyPlan
 }
 
 /// <summary>A snapshot of the platform's proxy configuration.</summary>
+/// <remarks>
+/// <see cref="Mode"/> is carried separately from <see cref="Enabled"/> because the platforms
+/// distinguish "off", "manual" and "automatic" — GNOME stores exactly that triad. Collapsing it
+/// into a boolean would make restoring a user's PAC configuration impossible to do faithfully,
+/// and a wrong restore leaves the machine pointing at a dead proxy after the VPN exits.
+/// </remarks>
 public sealed record SystemProxySnapshot
 {
+    /// <summary>Platform-native mode string: <c>none</c>, <c>manual</c> or <c>auto</c>.</summary>
+    public string? Mode { get; init; }
+
     public bool Enabled { get; init; }
 
     public string? PacUrl { get; init; }
