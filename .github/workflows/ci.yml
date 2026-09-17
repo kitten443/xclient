@@ -418,6 +418,25 @@ jobs:
   # attribution, not copied code. A v2rayN token on a non-comment line, a
   # namespace/using/ProjectReference, or the repo path `2dust/v2rayN` fails.
   # ===========================================================================
+  # 8. LOCALIZATION COMPLETENESS
+  # A missing message key is not cosmetic: the UI resolves an error's MessageKey through
+  # the catalog, so a gap shows the user a raw identifier such as
+  # `error.route.bypass_failed` at exactly the moment something has gone wrong.
+  localization-check:
+    name: Localization completeness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every referenced message key must exist in every catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build/check-localization.py
+          # Header-catalog labels are allowed to fall back to English while the
+          # subscription-consent UI is still being built; flip this to
+          # --strict-headers once those translations are complete.
+
   provenance-guard:
     name: Clean-room provenance guard
     runs-on: ubuntu-latest
