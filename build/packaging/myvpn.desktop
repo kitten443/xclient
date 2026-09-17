@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=MyVpn
+Comment=Xray-core VPN client
+Exec=myvpn-ui
+Icon=myvpn
+Categories=Network;
+Terminal=false

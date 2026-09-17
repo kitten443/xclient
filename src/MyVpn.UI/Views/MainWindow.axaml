@@ -5,6 +5,7 @@
         x:Class="MyVpn.UI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding AppTitle}"
+        Icon="avares://myvpn-ui/Assets/myvpn.png"
         Width="560" Height="720"
         MinWidth="460" MinHeight="600">
 

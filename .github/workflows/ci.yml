@@ -144,7 +144,8 @@ jobs:
           for project in \
             tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj \
             tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj \
-            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
+            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj \
+            tests/MyVpn.UI.Tests/MyVpn.UI.Tests.csproj
           do
             echo "::group::dotnet test $project"
             dotnet test "$project" -c "$CONFIGURATION" "${args[@]}"
@@ -220,7 +221,8 @@ jobs:
           for project in \
             tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj \
             tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj \
-            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
+            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj \
+            tests/MyVpn.UI.Tests/MyVpn.UI.Tests.csproj
           do
             echo "::group::dotnet test $project"
             dotnet test "$project" -c "$CONFIGURATION" --no-build
@@ -682,8 +684,14 @@ jobs:
           [ "$rid" = 'linux-arm64' ] && arch='arm64'
 
           # -- nfpm: one declarative config, both package formats -------------
+          # Two arch spellings, two consumers: nfpm.yaml wants the deb/rpm spelling
+          # (amd64/arm64); the goreleaser asset name uses x86_64/arm64 — and the
+          # path segment is "Linux" (case-insensitive on GitHub, which is why only
+          # the amd64/x86_64 mismatch showed up, as a 404 on the x64 leg).
+          dl_arch='x86_64'
+          [ "$rid" = 'linux-arm64' ] && dl_arch='arm64'
           curl -sSL --fail --retry 3 \
-            "https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_${arch}.tar.gz" \
+            "https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_Linux_${dl_arch}.tar.gz" \
             -o nfpm.tar.gz
           tar -xzf nfpm.tar.gz nfpm
           mkdir -p build/nfpm
@@ -696,7 +704,7 @@ jobs:
           priority: optional
           maintainer: MyVpn Contributors
           description: MyVpn VPN client (Xray-core TUN)
-          license: GPL-3.0-or-later
+          license: GPL-3.0-only
           contents:
             - src: dist/${rid}/app
               dst: /usr/lib/myvpn
@@ -704,15 +712,23 @@ jobs:
               dst: /usr/share/doc/myvpn/NOTICE
             - src: LICENSE
               dst: /usr/share/doc/myvpn/LICENSE
+            - src: build/packaging/myvpn.desktop
+              dst: /usr/share/applications/myvpn.desktop
+            - src: src/MyVpn.UI/Assets/myvpn.png
+              dst: /usr/share/icons/hicolor/256x256/apps/myvpn.png
           EOF
           ./nfpm package --config build/nfpm/nfpm.yaml --packager deb --target "dist/$rid/MyVpn-${version}-${rid}.deb"
           ./nfpm package --config build/nfpm/nfpm.yaml --packager rpm --target "dist/$rid/MyVpn-${version}-${rid}.rpm"
 
           # -- AppImage: GUI only, no privileged helper ------------------------
+          # appimagetool refuses an AppDir with no .desktop file, and the desktop
+          # file's Icon= must resolve to an icon in the AppDir root.
           tool_arch='x86_64'
           [ "$rid" = 'linux-arm64' ] && tool_arch='aarch64'
           mkdir -p "dist/$rid/MyVpn.AppDir/usr/bin"
           cp -r "dist/$rid/app/." "dist/$rid/MyVpn.AppDir/usr/bin/"
+          cp build/packaging/myvpn.desktop "dist/$rid/MyVpn.AppDir/myvpn.desktop"
+          cp src/MyVpn.UI/Assets/myvpn.png "dist/$rid/MyVpn.AppDir/myvpn.png"
           cat > "dist/$rid/MyVpn.AppDir/AppRun" <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"

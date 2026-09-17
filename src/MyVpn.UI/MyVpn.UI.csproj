@@ -57,6 +57,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Localization/locales/*.json" />
+    <AvaloniaResource Include="Assets/myvpn.png" />
   </ItemGroup>
 
 </Project>

@@ -270,15 +270,16 @@ Verified by inspecting the source tree and building it.
 [`docs/architecture/overview.md`](docs/architecture/overview.md#known-gaps-and-inaccuracies-in-the-current-tree)):
 
 * Some `.csproj` comments describe planned behaviour in the present tense.
-* `MyVpn.UI.csproj` still references `Assets/**`, which does not exist yet
-  (`app.manifest` and `Localization/locales/*.json` now do).
 * `TunSettings.AutoRoute` / `StrictRoute` / `RouteOnly` are MyVpn policy, not
   Xray JSON fields. The builder maps `AutoRoute` onto the routing rules and `RouteOnly`
   onto `sniffing.routeOnly` (a real Xray field), and never emits them as TUN-inbound keys.
-* `MyVpn.Core.Tests` references `src/MyVpn.UI`, so the UI is tested from the Core test
-  project rather than one of its own.
-* The UI has never been rendered in this environment — there is no display and no Xvfb — so
-  the views are compile- and binding-verified only.
+* `MyVpn.Core.Tests` references `src/MyVpn.UI`, so some UI types are exercised from the
+  Core test project; `tests/MyVpn.UI.Tests` renders the real windows headlessly with
+  `Avalonia.Headless` (real Skia pixels, every tab, language switching) and
+  [`docs/screenshots/`](docs/screenshots/) shows the output.
+* The UI has never run on a real desktop — only headlessly. Chinese text renders as
+  boxes unless the system provides a CJK font, because the app bundles Inter only
+  (visible in `docs/screenshots/07-status-zh-hans.png`).
 
 ## Security model
 
