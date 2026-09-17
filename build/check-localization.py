@@ -55,6 +55,18 @@ NOT_KEYS = {
     "geosite.dat",
 }
 
+#: Every real key starts with one of these families. A shape-based heuristic alone let
+#: reverse-DNS identifiers such as "com.apple" (from a PF anchor name) through, because
+#: they look exactly like a two-level dotted lowercase key. Anchoring on the family is
+#: both simpler and stricter.
+KEY_FAMILIES = {
+    "error", "warning", "diagnostics", "cleanup", "killswitch", "route", "dns",
+    "proxy", "tun", "geodata", "privilege", "network", "subscription", "subscriptions",
+    "header", "xray", "session", "config", "settings", "logging", "mux", "connectivity",
+    "updates", "routing", "server", "platform", "operation", "app", "main", "status",
+    "mode", "language", "theme", "sharelink", "state", "process", "ipc",
+}
+
 #: Final path segments that mark a literal as a file name rather than a key.
 FILE_EXTENSIONS = {
     "dat", "exe", "dll", "so", "dylib", "json", "conf", "pac", "cs", "axaml",
@@ -109,6 +121,9 @@ def looks_like_key(candidate: str) -> bool:
         return False
 
     segments = candidate.split(".")
+
+    if segments[0] not in KEY_FAMILIES:
+        return False
 
     if segments[-1].lower() in FILE_EXTENSIONS:
         return False
