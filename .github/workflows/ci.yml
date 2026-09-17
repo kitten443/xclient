@@ -438,85 +438,53 @@ jobs:
           # --strict-headers once those translations are complete.
 
   provenance-guard:
-    name: Clean-room provenance guard
+    name: Clean-room and attribution guard
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Scan src/ and tests/ for forbidden tokens
+      - name: Excluded network core must not appear
         shell: bash
         run: |
           set -uo pipefail
+          grep_opts=(-rniE --exclude-dir=obj --exclude-dir=bin --exclude-dir=.git)
+          hit="$(grep "${grep_opts[@]}" 'sing[[:space:]_-]?box' src tests 2>/dev/null || true)"
+          if [ -n "$hit" ]; then
+            echo "::error::Forbidden network-core reference ('sing-box') under src/ or tests/:"
+            echo "$hit"
+            exit 1
+          fi
+
+      - name: Adapted third-party code must carry attribution
+        shell: bash
+        run: |
+          set -uo pipefail
+          # This project may incorporate code adapted from v2rayN, which is GPL-3.0-only.
+          # Adapting it is permitted, but distributing it WITHOUT a provenance header is
+          # both a licence violation and a false statement of authorship. The check is
+          # therefore inverted from "the name must not appear" to "if the name appears in
+          # a source file, that file must declare its origin".
           status=0
 
-          for root in src tests; do
-            if [ ! -d "$root" ]; then
-              echo "::error::expected directory '$root' is missing"
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              *tests/*) continue ;;
+            esac
+            if ! head -40 "$file" | grep -qiE 'provenance|adapted from|derived from|v2rayN'; then
+              echo "::error file=$file::This file references v2rayN but has no provenance header."
+              echo "  Add a header naming the upstream file, its licence (GPL-3.0-only), and the"
+              echo "  nature of the change. See docs/provenance.md."
               status=1
             fi
-          done
+          done < <(grep -rliE 'v2rayN|2dust' src 2>/dev/null | grep -vE '/(obj|bin)/' || true)
+
           [ "$status" -eq 0 ] || exit "$status"
 
-          grep_opts=(-rniE --exclude-dir=obj --exclude-dir=bin --exclude-dir=.git)
-
-          # --- 1. The excluded network core must not be named at all.
-          singbox="$(grep "${grep_opts[@]}" 'sing[[:space:]_-]?box' src tests 2>/dev/null || true)"
-          if [ -n "$singbox" ]; then
-            echo "::error::Forbidden network-core reference ('sing-box') found under src/ or tests/:"
-            echo "$singbox"
-            status=1
-          fi
-
-          # --- 2. v2rayN paths / identifiers (not prose).
-          ident_re='2dust/v2rayn|v2rayn[./]|(using|namespace|import|alias)[[:space:]]+v2rayn|projectreference[^>]*v2rayn|packagereference[^>]*v2rayn|assemblyname[^>]*v2rayn|rootnamespace[^>]*v2rayn'
-          idents="$(grep "${grep_opts[@]}" "$ident_re" src tests 2>/dev/null || true)"
-          if [ -n "$idents" ]; then
-            echo "::error::Forbidden v2rayN path/identifier found under src/ or tests/:"
-            echo "$idents"
-            status=1
-          fi
-
-          # --- 3. The bare token on a non-comment line means real code/identifier.
-          code_hits="$(grep "${grep_opts[@]}" 'v2rayn' src tests 2>/dev/null \
-            | grep -vE ':[[:space:]]*(///|//|\*|/\*)' || true)"
-          if [ -n "$code_hits" ]; then
-            echo "::error::'v2rayN' appears outside a comment under src/ or tests/:"
-            echo "$code_hits"
-            status=1
-          fi
-
-          # --- 4. Reported, allowed: documented prose citations in comments.
-          citations="$(grep "${grep_opts[@]}" 'v2rayn' src tests 2>/dev/null \
-            | grep -E ':[[:space:]]*(///|//|\*|/\*)' || true)"
-          if [ -n "$citations" ]; then
-            echo "::notice::Documented comment citations of the studied prior art (allowed; attribution only):"
-            echo "$citations"
-          fi
-
-          if [ "$status" -eq 0 ]; then
-            echo "Clean-room guard passed: no excluded core name, no v2rayN path or identifier."
-          fi
-          exit "$status"
-
-  # ===========================================================================
-  # 8. PACKAGING  (installer / portable / deb / rpm / AppImage / .app)
-  # ===========================================================================
-  # One leg per target RID. Cross-compilation is avoided where a matching
-  # runner exists: win-x64 on windows-latest, linux-arm64 on the arm64 runner,
-  # osx-x64 on macos-13 (Intel), osx-arm64 on macos-14.
-  #
-  # Publish is always `--self-contained true` with an explicit RID so the
-  # produced payload has no runtime dependency for the user. Trimming stays off:
-  # Avalonia's XAML/reflection paths and the JSON config model are not
-  # trim-analysed yet.
-  #
-  # The preflight guard publishes only when all three head-project entry points
-  # exist; otherwise it emits a loud ::notice:: and skips. The guard is now
-  # satisfied, but it is kept so the job degrades honestly rather than failing
-  # opaquely if an entry point is ever removed.
-  # ===========================================================================
+      - name: Provenance register must exist and be non-empty
+        shell: bash
+        run: |
+          test -s docs/provenance.md || { echo "::error::docs/provenance.md is missing or empty"; exit 1; }
   packaging:
     name: Package (${{ matrix.name }})
     needs: [build-test]

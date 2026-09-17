@@ -36,7 +36,14 @@
     <Authors>MyVpn Contributors</Authors>
     <Product>MyVpn</Product>
     <Copyright>Copyright (C) 2025 MyVpn Contributors</Copyright>
-    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <!--
+      GPL-3.0-only, not "or later". v2rayN is GPL-3.0-ONLY (its LICENSE carries no
+      "or later" clause, verified against the primary source), and this project may
+      incorporate adapted code from it. Our own files keep their "or later" grant, but the
+      combined distribution as a whole can only be offered under GPL-3.0, because the
+      additional permission cannot be granted over someone else's GPL-3.0-only code.
+    -->
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

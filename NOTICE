@@ -1,11 +1,21 @@
 MyVpn — third-party notices and provenance
 ==========================================
 
-MyVpn is an independent, from-scratch implementation. It is *architecture-inspired*
-by prior art in the Xray/V2Ray client ecosystem, but it does not contain copied
-source code from those projects. Where prior art informed a design decision, the
-influence is recorded in `docs/adr/` and `docs/research/` with a reference to the
-original project, so that the boundary between "studied" and "authored" is auditable.
+MyVpn is an independent implementation that *may* incorporate code adapted from prior
+art in the Xray/V2Ray client ecosystem. Every adapted component is recorded, with its
+upstream file and the nature of the change, in `docs/provenance.md`; that register is the
+authoritative record and this file summarises it.
+
+The distinction that matters is between "studied" and "derived". Studied influence is
+recorded in `docs/adr/` and `docs/research/`. Derived code is recorded in the register
+and carries an attribution header in the file itself. As of this revision **no component
+has been adapted from another client** — the register contains no entries — but the
+policy below governs what may be, and what must never be.
+
+That register also carries a **do-not-copy list**: components whose upstream
+implementation is defective in a way this project was created to fix. Those are excluded
+regardless of convenience, because copying them would silently reintroduce the exact
+defects the project exists to eliminate.
 
 -------------------------------------------------------------------------------
 1. Xray-core (the network engine)
@@ -44,13 +54,34 @@ contents. Attribution and licence text accompany any redistributed copy.
 3. Reference projects studied (NO code copied)
 -------------------------------------------------------------------------------
 Project : v2rayN — https://github.com/2dust/v2rayN
-License : GNU GPL-3.0
-Use     : Studied for architecture and UX lessons only. v2rayN is a GPL-3.0
-          work. MyVpn does not copy its source code. Because MyVpn is itself
-          licensed GPL-3.0-or-later, any *future* decision to copy v2rayN code
-          would be licence-compatible, but it would still require preserving
-          copyright notices and marking the files as derived. No such copying
-          has occurred. See docs/research/01-v2rayn-architecture.md.
+License : GPL-3.0-ONLY. Its LICENSE file is the bare GPLv3 text with no "or later"
+          clause, and GitHub reports the SPDX identifier as `GPL-3.0`. Verified against
+          the primary source rather than assumed.
+Use     : Two distinct relationships, which must not be conflated:
+
+          (a) STUDIED. Architecture, UX and failure-mode analysis, recorded in
+              docs/research/01-v2rayn-architecture.md and the ADRs. This is not a
+              licensing event.
+
+          (b) ADAPTED. Code may be adapted from v2rayN. This is permitted because
+              GPL-3.0-only and GPL-3.0-or-later are compatible licences: the combined
+              work may be distributed under GPL-3.0. The obligations that follow are
+              not optional:
+                * preserve the upstream copyright notice and licence text;
+                * mark modified files as modified, with the date of change;
+                * state the nature of the change;
+                * make the complete corresponding source available (it is);
+                * impose no further restrictions on the adapted parts.
+
+          Because the additional "or later" permission cannot be granted over someone
+          else's GPL-3.0-only code, the combined distribution is offered under
+          GPL-3.0-only. See `PackageLicenseExpression` in Directory.Build.props.
+
+          Several upstream components are on the do-not-copy list in
+          docs/provenance.md — notably the core launch/environment path, which is the
+          direct cause of issue #9765, the unescaped shell-script generation that runs
+          as root, the absent core supervision, and the updater that verifies nothing.
+          Adapting those would reintroduce the defects this project exists to fix.
 
 Project : sing-box — https://github.com/SagerNet/sing-box
 License : GNU GPL-3.0 / other
@@ -89,7 +120,11 @@ A machine-readable dependency inventory is produced by the CI
 -------------------------------------------------------------------------------
 5. Redistribution checklist for release artifacts
 -------------------------------------------------------------------------------
-Before publishing any artifact that bundles third-party binaries or data:
+Before publishing any artifact, and before merging any adapted component:
+
+  0. record the component in docs/provenance.md with its upstream file, licence and the
+     nature of the change, and add the attribution header to the file (the CI
+     provenance-guard job fails an unattributed file);
   1. include the upstream LICENSE text for Xray-core;
   2. include the upstream LICENSE/attribution for geo data;
   3. include this NOTICE file;
