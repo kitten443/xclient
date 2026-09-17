@@ -134,7 +134,7 @@ public static class XrayConfigBuilder
         }
 
         // ---- outbounds ---------------------------------------------------
-        var outbounds = BuildOutbounds(request);
+        var outbounds = BuildOutbounds(request, warnings);
         if (outbounds.IsFailure)
         {
             return Result<XrayConfigBuildResult>.Fail(outbounds.Error!);
@@ -448,7 +448,9 @@ public static class XrayConfigBuilder
 
     // ------------------------------------------------------------------ outbounds
 
-    private static Result<IReadOnlyList<XrayOutbound>> BuildOutbounds(XrayConfigRequest request)
+    private static Result<IReadOnlyList<XrayOutbound>> BuildOutbounds(
+        XrayConfigRequest request,
+        ICollection<MyVpnError> warnings)
     {
         var profile = request.Profile;
         var settings = request.Settings;
@@ -482,7 +484,7 @@ public static class XrayConfigBuilder
             },
         };
 
-        var proxyResult = BuildProxyOutbound(request);
+        var proxyResult = BuildProxyOutbound(request, warnings);
         if (proxyResult.IsFailure)
         {
             return Result<IReadOnlyList<XrayOutbound>>.Fail(proxyResult.Error!);
@@ -505,7 +507,9 @@ public static class XrayConfigBuilder
         return Result<IReadOnlyList<XrayOutbound>>.Ok(outbounds);
     }
 
-    private static Result<XrayOutbound> BuildProxyOutbound(XrayConfigRequest request)
+    private static Result<XrayOutbound> BuildProxyOutbound(
+        XrayConfigRequest request,
+        ICollection<MyVpnError> warnings)
     {
         var profile = request.Profile;
 
@@ -525,9 +529,12 @@ public static class XrayConfigBuilder
                             {
                                 Id = profile.UserId ?? string.Empty,
 
-                                // VLESS requires the literal "none"; VMess carries a cipher name.
+                                // VLESS carries its encryption method here. Modern profiles put a
+                                // post-quantum key in this field; defaulting to "none" produces a
+                                // config the core accepts but that cannot connect, which is far
+                                // harder to diagnose than a rejected config.
                                 Encryption = profile.Protocol == ProxyProtocol.Vless
-                                    ? "none"
+                                    ? (string.IsNullOrWhiteSpace(profile.Encryption) ? "none" : profile.Encryption)
                                     : null,
 
                                 Flow = profile.Protocol == ProxyProtocol.Vless && profile.Flow == VlessFlow.XtlsRprxVision
@@ -586,7 +593,7 @@ public static class XrayConfigBuilder
                 $"Protocol {profile.Protocol} cannot be used as a proxy outbound."));
         }
 
-        var stream = BuildStreamSettings(request);
+        var stream = BuildStreamSettings(request, warnings);
         if (stream.IsFailure)
         {
             return Result<XrayOutbound>.Fail(stream.Error!);
@@ -609,7 +616,9 @@ public static class XrayConfigBuilder
         });
     }
 
-    private static Result<XrayStreamSettings> BuildStreamSettings(XrayConfigRequest request)
+    private static Result<XrayStreamSettings> BuildStreamSettings(
+        XrayConfigRequest request,
+        ICollection<MyVpnError> warnings)
     {
         var profile = request.Profile;
 
@@ -719,7 +728,8 @@ public static class XrayConfigBuilder
                 {
                     Path = profile.Path ?? "/",
                     Host = profile.Host,
-                    Mode = profile.TransportMode,
+                    Mode = NormalizeXhttpMode(profile.TransportMode, warnings),
+                    Extra = ParseTransportExtra(profile.TransportExtra, warnings),
                 },
             },
 
@@ -1109,6 +1119,86 @@ public static class XrayConfigBuilder
         TlsFingerprint.Randomized => "randomized",
         _ => null,
     };
+
+    /// <summary>
+    /// Validates an XHTTP mode against the set the core accepts.
+    /// </summary>
+    /// <remarks>
+    /// <c>SplitHTTPConfig.Build()</c> rejects anything outside
+    /// <c>auto</c>/<c>packet-up</c>/<c>stream-up</c>/<c>stream-one</c>, and normalises an empty
+    /// value to <c>auto</c>. An unrecognised mode is reported and downgraded to <c>auto</c> rather
+    /// than failing the whole build: an unusual subscription should still connect if it can.
+    /// </remarks>
+    private static string NormalizeXhttpMode(string? mode, ICollection<MyVpnError> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return "auto";
+        }
+
+        var normalized = mode.Trim().ToLowerInvariant();
+
+        if (normalized is "auto" or "packet-up" or "stream-up" or "stream-one")
+        {
+            return normalized;
+        }
+
+        warnings.Add(new MyVpnError(
+            ErrorCodes.ConfigInvalid,
+            "error.config.xhttp_mode_unknown",
+            ErrorSeverity.Warning,
+            $"XHTTP mode '{mode}' is not one of auto/packet-up/stream-up/stream-one; using 'auto'.")
+            .WithArg("mode", mode));
+
+        return "auto";
+    }
+
+    /// <summary>
+    /// Parses the share link's <c>extra=</c> JSON so it can be forwarded verbatim.
+    /// </summary>
+    /// <remarks>
+    /// Forwarded rather than modelled because the key set grows between core releases. Invalid
+    /// JSON is reported and dropped — the transport still works with its defaults, which is
+    /// strictly better than failing to connect.
+    /// </remarks>
+    private static JsonNode? ParseTransportExtra(string? extra, ICollection<MyVpnError> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(extra))
+        {
+            return null;
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(extra, documentOptions: new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip,
+                MaxDepth = 16,
+            });
+
+            if (node is JsonObject)
+            {
+                return node;
+            }
+
+            warnings.Add(new MyVpnError(
+                ErrorCodes.ConfigInvalid,
+                "error.config.transport_extra_not_object",
+                ErrorSeverity.Warning,
+                "The transport 'extra' parameter is not a JSON object and was ignored."));
+        }
+        catch (JsonException ex)
+        {
+            warnings.Add(new MyVpnError(
+                ErrorCodes.ConfigInvalid,
+                "error.config.transport_extra_invalid",
+                ErrorSeverity.Warning,
+                $"The transport 'extra' parameter is not valid JSON ({ex.Message}) and was ignored."));
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Whether a tunnel mode still needs the local SOCKS/HTTP listener.

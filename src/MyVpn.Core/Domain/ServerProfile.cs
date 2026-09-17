@@ -56,6 +56,19 @@ public sealed record ServerProfile
     /// <summary>Transport-specific mode: gRPC <c>multi</c>, xhttp <c>stream-up</c>, etc.</summary>
     public string? TransportMode { get; init; }
 
+    /// <summary>
+    /// Raw JSON carried by an <c>extra=</c> share-link parameter, verbatim.
+    /// </summary>
+    /// <remarks>
+    /// XHTTP uses this to pass a whole block of tuning settings (padding sizes, HTTP methods,
+    /// buffering limits). Xray treats the value as authoritative: when
+    /// <c>xhttpSettings.extra</c> is present, <c>SplitHTTPConfig.Build()</c> unmarshals it into a
+    /// fresh config and takes only <c>host</c>, <c>path</c> and <c>mode</c> from the sibling
+    /// fields. It is kept as an opaque string here rather than parsed into a model because the
+    /// set of keys grows between core releases and MyVpn must forward it without loss.
+    /// </remarks>
+    public string? TransportExtra { get; init; }
+
     /// <summary>HTTP header map for transports that need extra headers.</summary>
     public IReadOnlyDictionary<string, string>? TransportHeaders { get; init; }
 

@@ -487,9 +487,21 @@ public sealed record XrayXhttpSettings
     [JsonPropertyName("host")]
     public string? Host { get; init; }
 
-    /// <summary><c>auto</c>, <c>packet-up</c> or <c>stream-up</c>.</summary>
+    /// <summary><c>auto</c>, <c>packet-up</c>, <c>stream-up</c> or <c>stream-one</c>.</summary>
     [JsonPropertyName("mode")]
     public string? Mode { get; init; }
+
+    /// <summary>
+    /// Verbatim XHTTP tuning block from the profile's <c>extra=</c> parameter.
+    /// </summary>
+    /// <remarks>
+    /// Authoritative when present: Xray's <c>SplitHTTPConfig.Build()</c> unmarshals this into a
+    /// fresh config and copies only <c>host</c>, <c>path</c> and <c>mode</c> back from the sibling
+    /// fields, so any tuning set here overrides the top-level equivalents. It is forwarded as
+    /// parsed JSON rather than a typed model because the key set grows between core releases.
+    /// </remarks>
+    [JsonPropertyName("extra")]
+    public JsonNode? Extra { get; init; }
 }
 
 public sealed record XrayTcpSettings

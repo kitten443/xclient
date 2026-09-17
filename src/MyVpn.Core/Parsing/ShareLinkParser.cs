@@ -213,10 +213,18 @@ public static class ShareLinkParser
             Security = security,
             UserId = protocol is ProxyProtocol.Vless ? credential : null,
             Password = protocol is ProxyProtocol.Trojan ? credential : null,
+
+            // VLESS carries its encryption method in the `encryption` parameter. Modern profiles
+            // put a post-quantum key there, e.g.
+            // "mlkem768x25519plus.native.0rtt.<client-key>". Dropping it and defaulting to "none"
+            // produces a config that the core accepts but that cannot connect, so it is preserved
+            // verbatim.
+            Encryption = protocol is ProxyProtocol.Vless ? EmptyToNull(GetValue(query, "encryption")) : null,
             Host = EmptyToNull(GetValue(query, "host")),
             Path = EmptyToNull(GetValue(query, "path")),
             ServiceName = EmptyToNull(GetValue(query, "serviceName")),
             TransportMode = EmptyToNull(GetValue(query, "mode")),
+            TransportExtra = EmptyToNull(GetValue(query, "extra")),
             ServerName = EmptyToNull(GetValue(query, "sni")),
             Alpn = EmptyToNull(GetValue(query, "alpn")),
             Fingerprint = MapFingerprint(GetValue(query, "fp")),
