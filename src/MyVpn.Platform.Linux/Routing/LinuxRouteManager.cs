@@ -120,29 +120,43 @@ public sealed class LinuxRouteManager : IRouteManager
             return Result.Fail(NotElevated());
         }
 
-        // A stale capture from an earlier plan must never be restored for this one.
-        _displacedDefault = null;
-
         if (plan.TunnelRoutes.Any(route => route.DisplacesDefaultRoute))
         {
             // Capture before the change. Once the tunnel's default route is in place the original
             // uplink route may no longer be discoverable, and an unrestorable default route is how a
             // VPN client leaves a machine with no network at all after it exits.
-            var captured = await ProbeDefaultAsync(ipv6: false, physicalOnly: true, cancellationToken)
+            var v4 = await ProbeDefaultCoreAsync(ipv6: false, physicalOnly: true, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (captured.IsFailure)
-            {
-                captured = await ProbeDefaultAsync(ipv6: true, physicalOnly: true, cancellationToken)
-                    .ConfigureAwait(false);
-            }
+            // Only ask IPv6 when IPv4 produced no route: a v4 answer is the one that matters, and the
+            // second call is pure latency on the common path.
+            var v6 = v4.Route is null
+                ? await ProbeDefaultCoreAsync(ipv6: true, physicalOnly: true, cancellationToken)
+                    .ConfigureAwait(false)
+                : default;
 
-            if (captured.IsFailure)
+            var found = v4.Route ?? v6.Route;
+            if (found is not null)
             {
+                // A fresh capture always wins: the uplink may legitimately have changed.
+                _displacedDefault = found;
+            }
+            else if (_displacedDefault is null && (!v4.ToolAnswered || !v6.ToolAnswered))
+            {
+                // Neither family produced a route AND at least one probe could not answer, so we do
+                // not know whether a competing default route exists. Fail closed: installing a
+                // default-capturing route here is exactly the silent full-tunnel failure this class
+                // exists to prevent, because a surviving lower-metric uplink default wins over the
+                // tunnel's route while the client still reports "connected".
                 return Result.Fail(NoDefaultToDisplace());
             }
 
-            _displacedDefault = captured.Value;
+            // Two cases reach here, and both are safe to continue:
+            //   * the kernel answered and there is no default route at all, so nothing can compete
+            //     with the tunnel's default and nothing needs restoring;
+            //   * a previous ApplyAsync already captured one and this call could not re-derive it
+            //     (typically because THIS process removed it), so the earlier capture is deliberately
+            //     kept — discarding it would leave the later teardown unable to restore the host.
         }
 
         // (1) Bypass (uplink host) routes first. These keep the core's own connection to the server on
@@ -163,11 +177,28 @@ public sealed class LinuxRouteManager : IRouteManager
         // (2) Only now may a route capture the default prefix.
         foreach (var route in plan.TunnelRoutes)
         {
-            // "replace" is used only for an entry that is expected to already exist (the route it
-            // displaces); everything else is an "add", whose EEXIST answer is treated as idempotent
-            // success so that re-applying a plan is harmless.
-            var added = await AddRouteAsync(route, route.DisplacesDefaultRoute, cancellationToken)
-                .ConfigureAwait(false);
+            if (route.DisplacesDefaultRoute && _displacedDefault is { } displaced)
+            {
+                // Deleting the uplink default IS what displacing means, and "replace" does not do
+                // it: Linux distinguishes default routes partly by metric, so
+                // `route replace default dev <tun> metric 1` ADDS a second default rather than
+                // removing one at metric 0. The kernel then prefers metric 0, every packet leaves
+                // by the physical interface, and the client still reports "connected".
+                //
+                // Verified in a throwaway netns before this change: with the uplink default at
+                // metric 100 the kernel chose the tunnel; with the uplink default at metric 0 it
+                // chose the uplink. Metric 0 is what a bare `ip route add default via <gw>` and many
+                // static configurations produce, so this was a silent full-tunnel failure on a
+                // large class of hosts -- and a traffic leak wherever no Kill Switch was armed.
+                var removed = await RemoveDefaultAsync(displaced, cancellationToken).ConfigureAwait(false);
+                if (removed.IsFailure)
+                {
+                    return removed;
+                }
+            }
+
+            // "add" with EEXIST treated as idempotent success, so re-applying a plan is harmless.
+            var added = await AddRouteAsync(route, replace: false, cancellationToken).ConfigureAwait(false);
 
             if (added.IsFailure)
             {
@@ -217,29 +248,15 @@ public sealed class LinuxRouteManager : IRouteManager
 
         var failures = new List<string>();
 
-        // (1) Tunnel routes first: they are the routes that capture the default prefix, and removing
-        // them last would leave the core's own traffic pointed at a tunnel that is already going away.
-        // Reverse order is the mirror image of installation.
-        foreach (var route in plan.TunnelRoutes.Reverse())
-        {
-            var removed = await DeleteRouteAsync(route, cancellationToken).ConfigureAwait(false);
-            if (removed.IsFailure)
-            {
-                failures.Add(Describe(removed.Error!));
-            }
-        }
-
-        // (2) Only then the bypass routes.
-        foreach (var route in plan.BypassRoutes.Reverse())
-        {
-            var removed = await DeleteRouteAsync(route, cancellationToken).ConfigureAwait(false);
-            if (removed.IsFailure)
-            {
-                failures.Add(Describe(removed.Error!));
-            }
-        }
-
-        // (3) Put the displaced default route back.
+        // (1) Put the displaced default route back FIRST, while every route that makes its gateway
+        // reachable is still installed. Deleting the bypass routes before this is a real defect, not a
+        // theoretical one: on a point-to-point topology where the uplink address is a /32 and the
+        // gateway is only reachable through a host route, `ip route add default via <gw> dev <uplink>`
+        // fails with "Nexthop has invalid gateway" (exit 2) once that host route is gone, and the host
+        // is then left with NO default route at all -- the exact outcome this ordering exists to
+        // prevent. Restoring here also removes the window in which the machine has no default route:
+        // the tunnel's own default (a lower metric) keeps winning until step (2) removes it, and the
+        // kernel then falls back to the route restored here.
         if (displacing.Count > 0)
         {
             if (restore is null)
@@ -255,6 +272,28 @@ public sealed class LinuxRouteManager : IRouteManager
                 {
                     failures.Add(Describe(restored.Error!));
                 }
+            }
+        }
+
+        // (2) Tunnel routes next: they are the routes that capture the default prefix, and removing
+        // them last would leave the core's own traffic pointed at a tunnel that is already going away.
+        // Reverse order is the mirror image of installation.
+        foreach (var route in plan.TunnelRoutes.Reverse())
+        {
+            var removed = await DeleteRouteAsync(route, cancellationToken).ConfigureAwait(false);
+            if (removed.IsFailure)
+            {
+                failures.Add(Describe(removed.Error!));
+            }
+        }
+
+        // (3) Only then the bypass routes, whose host routes may be the gateway's only reachability.
+        foreach (var route in plan.BypassRoutes.Reverse())
+        {
+            var removed = await DeleteRouteAsync(route, cancellationToken).ConfigureAwait(false);
+            if (removed.IsFailure)
+            {
+                failures.Add(Describe(removed.Error!));
             }
         }
 
@@ -629,6 +668,46 @@ public sealed class LinuxRouteManager : IRouteManager
     }
 
     /// <summary>
+    /// Removes one specific default route, identified exactly as it was observed.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="RestoreDefaultAsync"/>. A route that is already gone is
+    /// success, not failure: on a re-apply the deletion from the previous pass has already
+    /// happened, and reporting that as an error would make a harmless reconnect look broken.
+    /// </remarks>
+    private async Task<Result> RemoveDefaultAsync(ObservedRoute route, CancellationToken cancellationToken)
+    {
+        var arguments = new List<string>
+        {
+            FamilyFlag(route.IsIpv6),
+            "route",
+            "del",
+            "default",
+        };
+
+        if (route.Gateway is not null)
+        {
+            arguments.Add("via");
+            arguments.Add(route.Gateway);
+        }
+
+        arguments.Add("dev");
+        arguments.Add(route.Device);
+
+        if (route.Metric is not null)
+        {
+            arguments.Add("metric");
+            arguments.Add(route.Metric.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        var result = await RunIpAsync(arguments, cancellationToken).ConfigureAwait(false);
+
+        return result.Succeeded || IsAlreadyGone(result)
+            ? Result.Ok()
+            : Result.Fail(RemoveFailedFor(route, result));
+    }
+
+    /// <summary>
     /// Reads the default route of one address family.
     /// </summary>
     /// <param name="ipv6">Query the IPv6 table instead of the IPv4 one.</param>
@@ -643,12 +722,41 @@ public sealed class LinuxRouteManager : IRouteManager
         CancellationToken cancellationToken)
     {
         var family = FamilyFlag(ipv6);
+        var probe = await ProbeDefaultCoreAsync(ipv6, physicalOnly, cancellationToken).ConfigureAwait(false);
+
+        return probe.Route is { } route
+            ? Result<ObservedRoute>.Ok(route)
+            : Result<ObservedRoute>.Fail(NoDefaultRoute(family, probe.Result));
+    }
+
+    /// <summary>
+    /// The result of asking the kernel for the current default route, keeping "the tool could not
+    /// answer" apart from "the answer is: there is none".
+    /// </summary>
+    /// <remarks>
+    /// The distinction is load-bearing rather than cosmetic. A caller that is about to install a
+    /// default-capturing route must fail closed when it could not find out whether a competing default
+    /// exists, because a surviving lower-metric uplink default silently wins over the tunnel's route
+    /// and every packet keeps leaving by the physical interface while the client reports "connected".
+    /// When the kernel answers positively that no default route exists there is nothing that could
+    /// compete, so refusing would be over-strict — and would make a host with no default route (a
+    /// fresh network namespace, an isolated segment) permanently unable to connect. Collapsing both
+    /// cases into one failure, as this code used to, cannot express either behaviour correctly.
+    /// </remarks>
+    private readonly record struct DefaultProbe(bool ToolAnswered, ObservedRoute? Route, CommandResult Result);
+
+    private async Task<DefaultProbe> ProbeDefaultCoreAsync(
+        bool ipv6,
+        bool physicalOnly,
+        CancellationToken cancellationToken)
+    {
+        var family = FamilyFlag(ipv6);
         var result = await RunIpAsync(
             new[] { family, "route", "show", "default" }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Succeeded)
         {
-            return Result<ObservedRoute>.Fail(NoDefaultRoute(family, result));
+            return new DefaultProbe(ToolAnswered: false, Route: null, Result: result);
         }
 
         var candidates = ParseRoutes(result.StandardOutput, ipv6)
@@ -660,9 +768,7 @@ public sealed class LinuxRouteManager : IRouteManager
         var chosen = candidates.FirstOrDefault(route => !IsOwnedDevice(route.Device))
                      ?? (physicalOnly ? null : candidates.FirstOrDefault());
 
-        return chosen is null
-            ? Result<ObservedRoute>.Fail(NoDefaultRoute(family, result))
-            : Result<ObservedRoute>.Ok(chosen);
+        return new DefaultProbe(ToolAnswered: true, Route: chosen, Result: result);
     }
 
     private static IReadOnlyList<string> BuildAddArguments(string verb, RouteEntry route)
@@ -1005,6 +1111,15 @@ public sealed class LinuxRouteManager : IRouteManager
             $"'ip route del {route}' failed with exit code {result.ExitCode}: {Trim(result.Combined)}",
             "network.restore")
         .WithArg("route", route.ToString());
+
+    private static MyVpnError RemoveFailedFor(ObservedRoute route, CommandResult result) =>
+        new(
+            ErrorCodes.RouteRemoveFailed,
+            "error.route.displace_failed",
+            ErrorSeverity.Critical,
+            $"The default route being displaced ('{route.Text.Trim()}') could not be removed, so the "
+            + $"tunnel's default route would not take effect: exit code {result.ExitCode}: {Trim(result.Combined)}",
+            "network.restore");
 
     private static MyVpnError RestoreFailed(ObservedRoute displaced, CommandResult result) =>
         new(

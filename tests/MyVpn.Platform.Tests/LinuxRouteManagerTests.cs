@@ -336,15 +336,24 @@ public sealed class LinuxRouteManagerTests
         var commands = Commands(runner);
 
         var capture = commands.FindIndex(command => command.Contains("route show default", StringComparison.Ordinal));
-        var install = commands.FindIndex(command => command.Contains("route replace", StringComparison.Ordinal));
+        var install = commands.FindIndex(command => command.Contains("route add default", StringComparison.Ordinal));
 
         capture.ShouldBeGreaterThanOrEqualTo(0);
         install.ShouldBeGreaterThan(capture);
 
-        // "replace" is used only for the entry that is expected to already exist; the bypass route is
-        // a plain "add", and the tunnel route that does not displace anything would be too.
-        commands.ShouldContain("-4 route replace default dev myvpn0 metric 1");
+        // Displacing means DELETING the uplink default, not adding a second one. `route replace` cannot
+        // do it: Linux distinguishes default routes partly by metric, so "replace ... metric 1" leaves
+        // an uplink default at metric 100 in place, and the kernel then prefers whichever metric is
+        // lower. It was the metric-0 case that produced a silent full-tunnel failure, but neither
+        // metric is safe to leave behind, so the delete is unconditional.
+        commands.ShouldContain("-4 route del default via 192.168.1.1 dev enp3s0 metric 100");
+        commands.ShouldContain("-4 route add default dev myvpn0 metric 1");
+        commands.ShouldNotContain("-4 route replace default dev myvpn0 metric 1");
+
+        // The uplink host route is a plain "add"; the delete must precede the capture.
         commands.ShouldContain("-4 route add 203.0.113.7/32 via 192.168.1.1 dev enp3s0 metric 1");
+        commands.FindIndex(command => command.Contains("route del default", StringComparison.Ordinal))
+            .ShouldBeLessThan(install);
 
         runner.Calls.Clear();
 
@@ -355,26 +364,150 @@ public sealed class LinuxRouteManagerTests
         afterRemoval.ShouldContain("-4 route del default dev myvpn0");
         afterRemoval.ShouldContain("-4 route add default via 192.168.1.1 dev enp3s0 metric 100");
 
-        // The restore is last, so the host is never left without a default route in between.
-        afterRemoval[^1].ShouldBe("-4 route add default via 192.168.1.1 dev enp3s0 metric 100");
+        // The restore comes FIRST, before any route is deleted. The gateway of the restored default may
+        // be reachable only through one of the routes this teardown removes, and
+        // `ip route add default via <gw> dev <uplink>` then fails with "Nexthop has invalid gateway"
+        // (verified against a real kernel: exit 2), leaving the host with no default route at all.
+        // Doing it first also closes the gap in which the machine has no default: the tunnel's
+        // lower-metric default keeps winning until the tunnel route is deleted below.
+        var restoreIndex = afterRemoval.FindIndex(
+            command => command.Contains("route add default", StringComparison.Ordinal));
+        var firstDelete = afterRemoval.FindIndex(
+            command => command.Contains("route del", StringComparison.Ordinal));
+
+        restoreIndex.ShouldBeGreaterThanOrEqualTo(0);
+        firstDelete.ShouldBeGreaterThan(
+            restoreIndex,
+            "the displaced default must be restored before anything is deleted");
 
         _output.WriteLine(string.Join(Environment.NewLine, afterRemoval));
     }
 
+    /// <summary>
+    /// The regression test for the silent full-tunnel failure.
+    /// </summary>
+    /// <remarks>
+    /// A bare <c>ip route add default via &lt;gw&gt;</c>, and many static configurations, leave the
+    /// uplink default at metric 0. Before this was fixed the manager installed its own default with
+    /// "replace" and left the metric-0 route alone; the kernel prefers the lower metric, so every
+    /// packet kept leaving by the physical interface while the client reported "connected" — a full
+    /// traffic leak on any host without a Kill Switch. Verified against a real kernel in a throwaway
+    /// network namespace before and after the change.
+    /// </remarks>
     [Fact]
-    public async Task RefusesToDisplaceTheDefaultWhenNothingCanBeCapturedToRestore()
+    public async Task DeletesAMetricZeroUplinkDefaultThatWouldOtherwiseWinOverTheTunnel()
     {
-        var runner = RunnerWithIp(); // every listing is empty: the host has no default route
+        var runner = RunnerWithIp();
+        runner.Respond(
+            "-4 route show default",
+            new CommandResult(0, "default via 192.168.1.1 dev enp3s0 metric 0 \n", string.Empty));
+
+        var manager = Manager(runner);
+        var applied = await manager.ApplyAsync(FullTunnelPlan(displaces: true), CancellationToken.None);
+        applied.IsSuccess.ShouldBeTrue();
+
+        var commands = Commands(runner);
+        var delete = commands.FindIndex(command => command.Contains("route del default", StringComparison.Ordinal));
+        var add = commands.FindIndex(command => command.Contains("route add default", StringComparison.Ordinal));
+
+        delete.ShouldBeGreaterThanOrEqualTo(0, "the metric-0 uplink default must be removed");
+        commands[delete].ShouldBe("-4 route del default via 192.168.1.1 dev enp3s0 metric 0");
+        add.ShouldBeGreaterThan(delete, "the tunnel default must be installed only after the uplink one is gone");
+    }
+
+    /// <summary>
+    /// A host with no default route at all must still be able to connect.
+    /// </summary>
+    /// <remarks>
+    /// "The kernel answered: there is no default route" is not the same as "the tool could not
+    /// answer". With no competing default, the tunnel's own route IS the default and nothing needs
+    /// restoring, so refusing here would make a fresh network namespace or an isolated segment
+    /// permanently unable to connect. The fail-closed case is covered by
+    /// <see cref="RefusesToDisplaceTheDefaultWhenTheToolCannotAnswer"/>.
+    /// </remarks>
+    [Fact]
+    public async Task DisplacesTheDefaultOnAHostThatHasNoneBecauseNothingCanCompete()
+    {
+        var runner = RunnerWithIp(); // every listing answers, with exit 0 and no output
+        var manager = Manager(runner);
+
+        var applied = await manager.ApplyAsync(FullTunnelPlan(displaces: true), CancellationToken.None);
+
+        applied.IsSuccess.ShouldBeTrue();
+
+        var commands = Commands(runner);
+
+        // Nothing was there to delete, and nothing is restored at teardown either.
+        commands.ShouldNotContain(command => command.Contains("route del default", StringComparison.Ordinal));
+        commands.ShouldContain("-4 route add default dev myvpn0 metric 1");
+    }
+
+    /// <summary>
+    /// Fail closed when the kernel never said whether a competing default route exists.
+    /// </summary>
+    /// <remarks>
+    /// This is the case that must NOT proceed. If <c>ip route show default</c> fails, a lower-metric
+    /// uplink default may still be present, and installing the tunnel's default anyway would leave
+    /// traffic leaving by the physical interface with no error anywhere. Refusing is the only safe
+    /// answer when there is also no earlier capture to fall back on.
+    /// </remarks>
+    [Fact]
+    public async Task RefusesToDisplaceTheDefaultWhenTheToolCannotAnswer()
+    {
+        var runner = RunnerWithIp();
+        runner.Handler = (_, arguments) => arguments.Contains("show", StringComparer.Ordinal)
+            ? new CommandResult(2, string.Empty, "RTNETLINK answers: Operation not permitted")
+            : new CommandResult(0, string.Empty, string.Empty);
+
         var manager = Manager(runner);
 
         var applied = await manager.ApplyAsync(FullTunnelPlan(displaces: true), CancellationToken.None);
 
         applied.IsFailure.ShouldBeTrue();
         applied.Error!.MessageKey.ShouldBe("error.route.displace_without_capture");
+        applied.Error.Severity.ShouldBe(ErrorSeverity.Error);
 
         var commands = Commands(runner);
         commands.Any(command => command.Contains("route add", StringComparison.Ordinal)).ShouldBeFalse();
         commands.Any(command => command.Contains("route replace", StringComparison.Ordinal)).ShouldBeFalse();
+        commands.Any(command => command.Contains("route del", StringComparison.Ordinal)).ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// A re-apply must not throw away the only record of the route it already took.
+    /// </summary>
+    /// <remarks>
+    /// On the second <c>ApplyAsync</c> the physical default is gone precisely because this manager
+    /// removed it, so the probe now answers "none". Discarding the earlier capture there — which the
+    /// original "no capture means fail" code did, by failing the whole apply — left teardown unable to
+    /// restore the host's route, and a failed reconnect could strand the machine with no default at all.
+    /// </remarks>
+    [Fact]
+    public async Task AReApplyKeepsTheEarlierCaptureSoTeardownCanStillRestoreTheUplink()
+    {
+        var runner = RunnerWithIp();
+        runner.Respond(
+            "-4 route show default",
+            new CommandResult(0, "default via 192.168.1.1 dev enp3s0 metric 0 \n", string.Empty));
+
+        var manager = Manager(runner);
+        var plan = FullTunnelPlan(displaces: true);
+
+        (await manager.ApplyAsync(plan, CancellationToken.None)).IsSuccess.ShouldBeTrue();
+
+        // The uplink default is gone now: the second apply sees nothing, exactly like a real reconnect.
+        runner.Respond("-4 route show default", new CommandResult(0, string.Empty, string.Empty));
+        runner.Calls.Clear();
+
+        (await manager.ApplyAsync(plan, CancellationToken.None)).IsSuccess.ShouldBeTrue();
+
+        runner.Calls.Clear();
+        var removed = await manager.RemoveAsync(plan, CancellationToken.None);
+
+        removed.IsSuccess.ShouldBeTrue();
+        Commands(runner).ShouldContain(
+            "-4 route add default via 192.168.1.1 dev enp3s0 metric 0",
+            "the capture from the first apply is the only thing that can restore the uplink");
     }
 
     // ------------------------------------------------------------------ discovery

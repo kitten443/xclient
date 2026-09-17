@@ -224,6 +224,7 @@
   "error.route.no_default_route": "No default route was found on this system.",
   "error.route.no_interface": "The network interface is not configured.",
   "error.route.displace_without_capture": "The default route was about to be replaced without first recording the original, so the change was refused.",
+  "error.route.displace_failed": "The existing default route could not be removed. While it remains, the tunnel's own default route would not be used and traffic would keep leaving outside the tunnel, so the change was refused.",
   "route.install_iproute2": "Install iproute2",
   "error.dns.no_backend": "No supported way to change DNS was found on this system.",
   "error.dns.not_elevated": "Changing DNS requires administrative privileges. Install the MyVpn helper.",

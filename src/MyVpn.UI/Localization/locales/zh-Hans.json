@@ -224,6 +224,7 @@
   "error.route.no_default_route": "系统中未找到默认路由。",
   "error.route.no_interface": "未配置网络接口。",
   "error.route.displace_without_capture": "在未记录原默认路由的情况下尝试替换它，因此已拒绝该更改。",
+  "error.route.displace_failed": "无法删除现有的默认路由。只要它仍然存在，隧道的默认路由就不会生效，流量仍会绕开隧道外发，因此已拒绝该更改。",
   "route.install_iproute2": "安装 iproute2",
   "error.dns.no_backend": "在此系统中未找到受支持的 DNS 修改方式。",
   "error.dns.not_elevated": "修改 DNS 需要管理员权限。请安装 MyVpn 服务。",
