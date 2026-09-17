@@ -385,5 +385,13 @@
   "platform.enable_cgroup_v2": "启用 cgroup v2",
   "platform.upgrade_kernel": "更新内核",
   "process.reapply": "重新应用按应用路由",
-  "process.reconfigure": "更改应用选择"
+  "process.reconfigure": "更改应用选择",
+  "main.exit_address": "出口地址",
+  "main.direct_address": "未使用 VPN 时的地址",
+  "main.traffic_moved": "流量经隧道",
+  "main.profile_count": "找到的服务器",
+  "main.heading": "连接",
+  "main.latency_measured": "实测延迟",
+  "main.unknown": "未知",
+  "main.apply_consented": "应用你已批准的设置"
 }

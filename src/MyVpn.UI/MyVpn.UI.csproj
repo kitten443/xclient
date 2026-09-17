@@ -37,6 +37,22 @@
     <ProjectReference Include="../MyVpn.Infrastructure/MyVpn.Infrastructure.csproj" />
     <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
     <ProjectReference Include="../MyVpn.Ipc/MyVpn.Ipc.csproj" />
+
+    <!--
+      The three platform implementation projects, referenced so that the composition root can
+      construct the platform factory for the operating system it is running on. This is the
+      single privileged-adjacent decision the UI makes: it chooses a factory, and from then on
+      touches nothing but the port interfaces the factory hands it. Every concrete executor
+      (firewall, routes, DNS, system proxy) is used only through MyVpn.Application's
+      IVpnSession, which is what keeps privilege escalation out of the view models.
+
+      All three are referenced rather than one per build configuration because the platform is
+      selected at runtime (Directory.Build.props targets plain net8.0 everywhere), which is what
+      lets the whole solution build and test on a single CI runner.
+    -->
+    <ProjectReference Include="../MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.MacOS/MyVpn.Platform.MacOS.csproj" />
+    <ProjectReference Include="../MyVpn.Platform.Windows/MyVpn.Platform.Windows.csproj" />
   </ItemGroup>
 
   <ItemGroup>

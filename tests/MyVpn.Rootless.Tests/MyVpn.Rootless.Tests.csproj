@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>MyVpn.Rootless.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    The harness lives in a subdirectory of this project so the two stay together, but it is its
+    own console application with its own entry point. It must not be compiled into the test
+    assembly: the test starts it as a separate process precisely so that it can be given its own
+    user, mount and network namespaces.
+  -->
+  <ItemGroup>
+    <Compile Remove="Harness/**" />
+    <None Remove="Harness/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+    <ProjectReference Include="../../src/MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj" />
+
+    <!-- For the report contract only; the harness itself is executed, never loaded here. -->
+    <ProjectReference Include="Harness/MyVpn.Rootless.Harness.csproj" />
+  </ItemGroup>
+
+</Project>

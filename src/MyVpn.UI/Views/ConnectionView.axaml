@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyVpn.UI.ViewModels"
+             x:Class="MyVpn.UI.Views.ConnectionView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    The connect tab. The primary button is bound to ToggleConnectionCommand, whose CanExecute is
+    false whenever the session is busy or a transition is under way, so a second click during a
+    connect that takes tens of seconds cannot start a second operation.
+  -->
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="10">
+
+      <Button Height="50"
+              Margin="0,8,0,0"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              FontSize="16"
+              Content="{Binding ConnectButtonText}"
+              Command="{Binding ToggleConnectionCommand}" />
+
+      <!-- A failed connect must say so. The session has already rolled back by the time this
+           appears; nothing here is a reassuring state over a failed verification. -->
+      <Border CornerRadius="8"
+              Padding="12"
+              Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+              IsVisible="{Binding HasError}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding LastError}" TextWrapping="Wrap" FontSize="13" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="{Binding LabelStatus}" FontWeight="SemiBold" Margin="0,6,0,0" />
+
+      <ItemsControl ItemsSource="{Binding Details}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DetailRow">
+            <Grid ColumnDefinitions="170,*" Margin="0,3">
+              <TextBlock Grid.Column="0" Text="{Binding Label}" Opacity="0.6" FontSize="13" />
+              <TextBlock Grid.Column="1"
+                         Text="{Binding Value}"
+                         FontSize="13"
+                         TextWrapping="Wrap" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- Warnings are localized keys resolved through the catalog, never raw technical text. -->
+      <StackPanel Spacing="4" IsVisible="{Binding HasWarnings}">
+        <TextBlock Text="{Binding LabelKillSwitch}" FontWeight="SemiBold" Margin="0,6,0,0" />
+        <ItemsControl ItemsSource="{Binding Warnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DetailRow">
+              <Grid ColumnDefinitions="110,*" Margin="0,2">
+                <TextBlock Grid.Column="0" Text="{Binding Label}" Opacity="0.6" FontSize="12" />
+                <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+        <CheckBox Content="{Binding AdvancedModeLabel}" IsChecked="{Binding AdvancedMode}" />
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

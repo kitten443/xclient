@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyVpn.UI.ViewModels"
+             x:Class="MyVpn.UI.Views.DiagnosticsView"
+             x:DataType="vm:DiagnosticsViewModel">
+
+  <!--
+    Diagnostics. Nothing runs until the button is pressed: a screen that probes the network on
+    open would announce the user's presence, and the reachability check is a real outbound
+    request.
+
+    Each check's message is a localization key resolved through the catalog; the raw technical
+    detail is shown underneath as context and is never the explanation.
+  -->
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top"
+               Text="{Binding Heading}"
+               FontWeight="SemiBold"
+               Margin="0,8,0,8" />
+
+    <Button DockPanel.Dock="Top"
+            Content="{Binding RunLabel}"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Center"
+            Command="{Binding RunCommand}" />
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{Binding Summary}"
+               FontSize="12"
+               Opacity="0.7"
+               Margin="0,8,0,0" />
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{Binding Error}"
+               FontSize="12"
+               TextWrapping="Wrap"
+               IsVisible="{Binding HasError}" />
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+      <ItemsControl ItemsSource="{Binding Checks}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DiagnosticRow">
+            <Border CornerRadius="6"
+                    Padding="10"
+                    Margin="0,3"
+                    Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+              <StackPanel Spacing="3">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" />
+                  <TextBlock Grid.Column="1" Text="{Binding Duration}" FontSize="12" Opacity="0.6" />
+                </Grid>
+                <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Remediation}"
+                           FontSize="12"
+                           Opacity="0.7"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding HasRemediation}" />
+                <TextBlock Text="{Binding TechnicalDetail}"
+                           FontSize="11"
+                           Opacity="0.5"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding HasTechnicalDetail}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

@@ -16,6 +16,14 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/MyVpn.Core/MyVpn.Core.csproj" />
+
+    <!--
+      The UI project, referenced so the composition root and the view models can be exercised by
+      tests. The UI has no test project of its own, and this is the narrowest place to reach it:
+      the reference direction is tests -> UI -> application/platform, never the reverse, so
+      nothing under src/ gains a dependency on a test project.
+    -->
+    <ProjectReference Include="../../src/MyVpn.UI/MyVpn.UI.csproj" />
   </ItemGroup>
 
 </Project>

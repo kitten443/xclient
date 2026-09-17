@@ -468,5 +468,13 @@
   "platform.enable_cgroup_v2": "Enable cgroup v2",
   "platform.upgrade_kernel": "Update the kernel",
   "process.reapply": "Re-apply per-app routing",
-  "process.reconfigure": "Change the application selection"
+  "process.reconfigure": "Change the application selection",
+  "main.exit_address": "Exit address",
+  "main.direct_address": "Your address without VPN",
+  "main.traffic_moved": "Traffic tunnelled",
+  "main.profile_count": "Servers found",
+  "main.heading": "Connection",
+  "main.latency_measured": "Measured latency",
+  "main.unknown": "unknown",
+  "main.apply_consented": "Apply the settings you approved"
 }

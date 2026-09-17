@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MyVpn.Rootless.Harness</RootNamespace>
+    <AssemblyName>MyVpn.Rootless.Harness</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/MyVpn.Application/MyVpn.Application.csproj" />
+    <ProjectReference Include="../../../src/MyVpn.Core/MyVpn.Core.csproj" />
+    <ProjectReference Include="../../../src/MyVpn.Infrastructure/MyVpn.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
+    <ProjectReference Include="../../../src/MyVpn.Platform.Linux/MyVpn.Platform.Linux.csproj" />
+  </ItemGroup>
+
+</Project>

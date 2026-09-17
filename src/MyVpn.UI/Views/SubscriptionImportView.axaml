@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyVpn.UI.ViewModels"
+             x:Class="MyVpn.UI.Views.SubscriptionImportView"
+             x:DataType="vm:SubscriptionImportViewModel">
+
+  <!--
+    The three gates from ADR-0008, visible rather than collapsed into one "import" button:
+
+      * the provider title and announcement are applied automatically (display metadata only);
+      * confirmation-gated changes are listed and applied only after the user acts on them;
+      * refused headers are shown as a notice and are never applied and never offered.
+
+    The URL box holds the user's own input and is the only place the raw value appears. The
+    hint underneath shows a masked form, because a subscription URL is a bearer token.
+  -->
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="10">
+
+      <TextBlock Text="{Binding UrlLabel}" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+      <TextBox Text="{Binding Url}" Watermark="{Binding MaskedUrlHint}" />
+
+      <TextBlock Text="{Binding MaskedUrlHint}" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+
+      <Button Content="{Binding ImportLabel}"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              Command="{Binding ImportCommand}" />
+
+      <TextBlock Text="{Binding Status}" FontSize="12" Opacity="0.7" />
+
+      <Border CornerRadius="8"
+              Padding="12"
+              Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+              IsVisible="{Binding HasError}">
+        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" FontSize="13" />
+      </Border>
+
+      <!-- Gate A: applied automatically. -->
+      <TextBlock Text="{Binding ProviderLabel}" FontWeight="SemiBold" Margin="0,8,0,0" />
+      <Grid ColumnDefinitions="170,*">
+        <TextBlock Grid.Column="0" Text="{Binding ProviderLabel}" Opacity="0.6" FontSize="13" />
+        <TextBlock Grid.Column="1" Text="{Binding ProviderTitle}" FontSize="13" TextWrapping="Wrap" />
+      </Grid>
+      <Grid ColumnDefinitions="170,*">
+        <TextBlock Grid.Column="0" Text="{Binding ProfileCountLabel}" Opacity="0.6" FontSize="13" />
+        <TextBlock Grid.Column="1" Text="{Binding ProfileCount}" FontSize="13" />
+      </Grid>
+      <Grid ColumnDefinitions="170,*" IsVisible="{Binding HasAnnounce}">
+        <TextBlock Grid.Column="0" Text="{Binding AnnounceLabel}" Opacity="0.6" FontSize="13" />
+        <TextBlock Grid.Column="1" Text="{Binding Announce}" FontSize="13" TextWrapping="Wrap" />
+      </Grid>
+
+      <TextBlock Text="{Binding FailureNotice}"
+                 FontSize="12"
+                 Opacity="0.7"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding HasFailures}" />
+
+      <!-- Gate C: refused. A notice, never an offer. -->
+      <Border CornerRadius="8"
+              Padding="12"
+              Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+              IsVisible="{Binding HasRefusedHeaders}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding RefusedLabel}" FontWeight="SemiBold" FontSize="13" />
+          <TextBlock Text="{Binding RefusedNotice}" FontSize="12" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <!-- Gate B: consent required. Nothing here is applied until the button is pressed. -->
+      <StackPanel Spacing="6" IsVisible="{Binding HasPendingChanges}">
+        <TextBlock Text="{Binding PendingLabel}" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+        <ItemsControl ItemsSource="{Binding PendingChanges}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PendingChangeRow">
+              <Border CornerRadius="6"
+                      Padding="10"
+                      Margin="0,3"
+                      Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                <StackPanel Spacing="3">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="SemiBold" FontSize="13" />
+                    <TextBlock Grid.Column="1" Text="{Binding Risk}" FontSize="12" Opacity="0.6" />
+                  </Grid>
+                  <TextBlock Text="{Binding Description}" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Outcome}"
+                             FontSize="12"
+                             Opacity="0.7"
+                             TextWrapping="Wrap"
+                             IsVisible="{Binding HasOutcome}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button Content="{Binding ApplyLabel}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                Command="{Binding ApplyConsentedChangesCommand}" />
+      </StackPanel>
+
+      <!-- Parser diagnostics: the registry isolates a broken parser and reports it here. -->
+      <StackPanel Spacing="4" IsVisible="{Binding HasErrors}">
+        <ItemsControl ItemsSource="{Binding Errors}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DetailRow">
+              <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" Margin="0,2" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -123,13 +123,17 @@ internal static class HeaderValueParsing
         return true;
     }
 
-    /// <summary>Computes the consent token binding a change to one exact value.</summary>
-    public static string ConsentToken(string subscriptionId, string headerName, string valueFingerprint)
-    {
-        var material = string.Concat(subscriptionId, "\n", headerName.ToLowerInvariant(), "\n", valueFingerprint);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(material));
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    /// <summary>
+    /// Computes the consent token binding a change to one exact value.
+    /// </summary>
+    /// <remarks>
+    /// Delegates to <see cref="Subscriptions.ConsentToken"/> rather than implementing it. There
+    /// used to be two copies of this algorithm -- one here and a mirror in the UI, because this
+    /// helper is internal -- and a change to either would have silently invalidated every stored
+    /// consent in the other. One implementation, reachable from both.
+    /// </remarks>
+    public static string ConsentToken(string subscriptionId, string headerName, string valueFingerprint) =>
+        Subscriptions.ConsentToken.Compute(subscriptionId, headerName, valueFingerprint);
 }
 
 /// <summary>

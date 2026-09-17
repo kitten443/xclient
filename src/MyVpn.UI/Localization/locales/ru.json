@@ -385,5 +385,13 @@
   "platform.enable_cgroup_v2": "Включить cgroup v2",
   "platform.upgrade_kernel": "Обновить ядро",
   "process.reapply": "Применить маршрутизацию заново",
-  "process.reconfigure": "Изменить выбор приложений"
+  "process.reconfigure": "Изменить выбор приложений",
+  "main.exit_address": "Адрес выхода",
+  "main.direct_address": "Ваш адрес без VPN",
+  "main.traffic_moved": "Трафик через туннель",
+  "main.profile_count": "Найдено серверов",
+  "main.heading": "Подключение",
+  "main.latency_measured": "Измеренная задержка",
+  "main.unknown": "неизвестно",
+  "main.apply_consented": "Применить одобренные вами настройки"
 }

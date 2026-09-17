@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyVpn.UI.ViewModels"
+             x:Class="MyVpn.UI.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+  <!--
+    Read-only except for the core binary path. The settings that decide whether traffic leaks
+    (tunnel mode, Kill Switch mode, DNS mode, IPv6 handling) have no editor here on purpose:
+    until each has validation and an explanation, showing the effective value is the honest
+    option, and nothing can silently change it.
+  -->
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="10">
+
+      <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+      <ItemsControl ItemsSource="{Binding Details}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DetailRow">
+            <Grid ColumnDefinitions="170,*" Margin="0,3">
+              <TextBlock Grid.Column="0" Text="{Binding Label}" Opacity="0.6" FontSize="13" />
+              <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="13" TextWrapping="Wrap" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <TextBlock Text="{Binding CoreBinaryLabel}" FontWeight="SemiBold" Margin="0,8,0,0" />
+      <TextBox Text="{Binding CoreBinaryPath}" />
+
+      <Button Content="{Binding SaveLabel}"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              Command="{Binding SaveCommand}" />
+
+      <TextBlock Text="{Binding SaveStatus}" FontSize="12" Opacity="0.7" />
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

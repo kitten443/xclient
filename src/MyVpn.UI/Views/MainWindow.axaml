@@ -1,74 +1,78 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MyVpn.UI.ViewModels"
+        xmlns:views="using:MyVpn.UI.Views"
         x:Class="MyVpn.UI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding AppTitle}"
-        Width="520" Height="640"
-        MinWidth="440" MinHeight="560">
+        Width="560" Height="720"
+        MinWidth="460" MinHeight="600">
 
   <!--
     The main screen carries the actions that matter and nothing else. Technical parameters
-    are behind Advanced Mode; a first-time user should be able to connect without knowing
+    live behind Advanced Mode; a first-time user should be able to connect without knowing
     what an outbound or a geosite is.
-  -->
-  <DockPanel Margin="22">
 
-    <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,18">
-      <TextBlock Text="{Binding AppTitle}" FontSize="26" FontWeight="SemiBold" />
+    Every tab is a UserControl over a view model that the composition root built. The window
+    itself does nothing but host them: it never reaches for a port, a platform service or the
+    Xray process, and the connect action is a command on the main view model, which reaches
+    the machine only through IVpnSession.
+  -->
+  <DockPanel Margin="18">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,12">
+      <TextBlock Text="{Binding AppTitle}" FontSize="24" FontWeight="SemiBold" />
       <TextBlock Text="{Binding AppSubtitle}" Opacity="0.6" FontSize="13" />
     </StackPanel>
 
-    <!-- Status card -->
+    <!-- Status card. Always visible, on every tab: the connection state is the one thing a
+         user must never have to go looking for. -->
     <Border DockPanel.Dock="Top"
             CornerRadius="10"
-            Padding="16"
+            Padding="14"
+            Margin="0,0,0,12"
             Background="{DynamicResource SystemControlBackgroundListLowBrush}">
-      <StackPanel Spacing="6">
-        <TextBlock Text="{Binding StatusText}" FontSize="19" FontWeight="SemiBold" />
-        <TextBlock Text="{Binding ServerName}" Opacity="0.75" TextTrimming="CharacterEllipsis" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding StatusText}" FontSize="18" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding ServerName}"
+                   Opacity="0.75"
+                   FontSize="13"
+                   TextTrimming="CharacterEllipsis" />
+
+        <!-- The truth about verification, next to the state rather than buried in a table. -->
+        <TextBlock Text="{Binding TrafficMoved}" FontSize="13" />
       </StackPanel>
     </Border>
 
-    <!-- Primary action -->
-    <Button DockPanel.Dock="Top"
-            Margin="0,16"
-            Height="52"
-            HorizontalAlignment="Stretch"
-            HorizontalContentAlignment="Center"
-            FontSize="16"
-            Content="{Binding ConnectButtonText}"
-            Command="{Binding ToggleConnectionCommand}"
-            IsEnabled="{Binding !IsBusy}" />
+    <!-- Language switching stays outside the tabs: it is chrome, not a screen. -->
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,12,0,0">
+      <TextBlock Text="{Binding LabelLanguage}" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
+      <Button Content="EN" Command="{Binding SetLanguageCommand}" CommandParameter="en" />
+      <Button Content="RU" Command="{Binding SetLanguageCommand}" CommandParameter="ru" />
+      <Button Content="中文" Command="{Binding SetLanguageCommand}" CommandParameter="zh-Hans" />
+    </StackPanel>
 
-    <!-- Quick actions -->
-    <WrapPanel DockPanel.Dock="Bottom" Margin="0,18,0,0" ItemWidth="150" ItemHeight="34">
-      <Button Content="EN" Command="{Binding SetLanguageCommand}" CommandParameter="en" Margin="0,0,6,6" />
-      <Button Content="RU" Command="{Binding SetLanguageCommand}" CommandParameter="ru" Margin="0,0,6,6" />
-      <Button Content="中文" Command="{Binding SetLanguageCommand}" CommandParameter="zh-Hans" Margin="0,0,6,6" />
-    </WrapPanel>
+    <TabControl>
+      <TabItem Header="{Binding ConnectTabLabel}">
+        <views:ConnectionView DataContext="{Binding}" />
+      </TabItem>
 
-    <!-- Details -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-      <StackPanel Spacing="10">
-        <TextBlock Text="{Binding LabelStatus}" FontWeight="SemiBold" Margin="0,8,0,0" />
+      <TabItem Header="{Binding ServersTabLabel}">
+        <views:ServerListView DataContext="{Binding Servers}" />
+      </TabItem>
 
-        <ItemsControl ItemsSource="{Binding Details}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:DetailRow">
-              <Grid ColumnDefinitions="150,*" Margin="0,3">
-                <TextBlock Grid.Column="0" Text="{Binding Label}" Opacity="0.6" FontSize="13" />
-                <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="13" TextTrimming="CharacterEllipsis" />
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+      <TabItem Header="{Binding SubscriptionTabLabel}">
+        <views:SubscriptionImportView DataContext="{Binding Subscription}" />
+      </TabItem>
 
-        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
-          <CheckBox Content="{Binding AdvancedModeLabel}" IsChecked="{Binding AdvancedMode}" />
-        </StackPanel>
-      </StackPanel>
-    </ScrollViewer>
+      <TabItem Header="{Binding DiagnosticsTabLabel}">
+        <views:DiagnosticsView DataContext="{Binding Diagnostics}" />
+      </TabItem>
+
+      <TabItem Header="{Binding SettingsTabLabel}">
+        <views:SettingsView DataContext="{Binding Settings}" />
+      </TabItem>
+    </TabControl>
 
   </DockPanel>
 </Window>
