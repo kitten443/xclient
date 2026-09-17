@@ -41,3 +41,6 @@ packages/
 
 # Downloaded Xray core used for local verification (not part of the source tree)
 .tools/
+
+# Python bytecode from the repo scripts (build/check-*.py)
+__pycache__/
