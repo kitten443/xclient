@@ -136,7 +136,7 @@ public sealed class PfAnchorRendererTests
         return result.Value;
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersDeterministicallyWithNoPlatformSpecificLineEndings()
     {
         var first = Render(MacTestData.KillSwitchPlan());
@@ -150,7 +150,7 @@ public sealed class PfAnchorRendererTests
         first.ShouldEndWith("\n");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void EndsWithATerminalQuickBlock()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -171,7 +171,7 @@ public sealed class PfAnchorRendererTests
         ruleLines.Count(l => l.StartsWith("block drop quick all", StringComparison.Ordinal)).ShouldBe(1);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void PreservesApplesAnchorsBecauseLoadingReplacesTheMainRuleset()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -186,7 +186,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("load anchor \"com.apple\" from \"/etc/pf.anchors/com.apple\"");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersThePersistTableWithItsAddressesAndNeverAnEmptyLiteral()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -201,7 +201,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldNotContain("persist\n");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void SortsAndDeduplicatesTableAddressesAndCollapsesPorts()
     {
         var plan = MacTestData.KillSwitchPlan() with
@@ -227,7 +227,7 @@ public sealed class PfAnchorRendererTests
         IndexOf(ruleset, "port 443").ShouldBeLessThan(IndexOf(ruleset, "port 8443"));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersSingleProtocolEndpointsWithoutABraceList()
     {
         var plan = MacTestData.KillSwitchPlan() with
@@ -250,7 +250,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldNotContain("proto { udp }");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void BlocksComeBeforePermitsAndTheTerminalBlockComesLast()
     {
         var plan = MacTestData.KillSwitchPlan(blockIpv6: true, allowLan: true) with
@@ -284,7 +284,7 @@ public sealed class PfAnchorRendererTests
         tunnelPass.ShouldBeLessThan(terminal);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DropsIpv6InsideTheTunnelTooWhenIpv6IsDisabled()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan(blockIpv6: true));
@@ -302,7 +302,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldNotContain("ipv6-icmp");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void PassesDhcpv6AndIcmpv6WhenIpv6IsCarried()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan(blockIpv6: false));
@@ -316,7 +316,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("pass quick inet6 proto ipv6-icmp from any to any");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersDnsOnlyOnTheTunnelAndNeverAsAnExemption()
     {
         var plan = MacTestData.KillSwitchPlan() with
@@ -353,7 +353,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("pass out quick proto { tcp, udp } from any to 192.0.2.10 port 8443\n");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersLoopbackAsBothASkipOptionAndAnExplicitPass()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -364,7 +364,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("pass quick on lo0 all\n");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersDhcpOnlyWhenThePlanAsksForIt()
     {
         var withDhcp = Render(MacTestData.KillSwitchPlan(allowDhcp: true));
@@ -375,7 +375,7 @@ public sealed class PfAnchorRendererTests
         withoutDhcp.ShouldNotContain("port 68");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DoesNotRenderAnIcmpPassOutsideTheTunnel()
     {
         // AllowIcmp defaults to true on the plan, but the researched fail-closed ruleset does not pass
@@ -387,7 +387,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("#   * AllowIcmp is true in this plan, but no ICMP pass is rendered outside the");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void SetsBlockPolicyAndDisablesTheOptimizer()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -398,7 +398,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("set ruleset-optimization none\n");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesAPlanWithoutAnAllowedEndpoint()
     {
         var plan = MacTestData.KillSwitchPlan() with { AllowedEndpoints = Array.Empty<AllowedEndpoint>() };
@@ -411,7 +411,7 @@ public sealed class PfAnchorRendererTests
         rendered.Error.TechnicalDetail.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesAnEmptyTunnelInterface()
     {
         var rendered = PfAnchorRenderer.RenderInstall(
@@ -421,7 +421,7 @@ public sealed class PfAnchorRendererTests
         rendered.Error!.MessageKey.ShouldBe("error.killswitch.tunnel_interface_invalid");
     }
 
-    [Theory]
+    [TheoryOnNonMacOS]
     [InlineData("utun0 all\nblock drop quick all")]
     [InlineData("utun0\npass quick on lo0 all")]
     [InlineData("utun0; pass")]
@@ -444,7 +444,7 @@ public sealed class PfAnchorRendererTests
         PfAnchorRenderer.IsSafeInterfaceName(hostileName).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesAnIdentifierThatWouldAddARuleThroughAComment()
     {
         var plan = MacTestData.KillSwitchPlan(identifier: "myvpn\nblock drop quick all\npass quick all");
@@ -461,7 +461,7 @@ public sealed class PfAnchorRendererTests
         ruleset.ShouldContain("# identifier: myvpn block drop quick all pass quick all");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void AcceptsRealisticUtunNames()
     {
         foreach (var name in new[] { "utun0", "utun3", "utun12", "utun255" })
@@ -471,7 +471,7 @@ public sealed class PfAnchorRendererTests
         }
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DisabledModeRendersThePermissiveTeardownRuleset()
     {
         var rendered = PfAnchorRenderer.RenderInstall(MacTestData.KillSwitchPlan() with
@@ -485,7 +485,7 @@ public sealed class PfAnchorRendererTests
         rendered.Value.ShouldContain("anchor \"com.apple/*\"");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DisarmRulesetFiltersNothingAndKeepsApplesAnchors()
     {
         var rendered = PfAnchorRenderer.RenderDisarm();
@@ -504,7 +504,7 @@ public sealed class PfAnchorRendererTests
         rendered.Value.ShouldContain("load anchor \"com.apple\" from \"/etc/pf.anchors/com.apple\"");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ReportsTheInterfacesItsRulesetReferences()
     {
         var names = PfAnchorRenderer.ReferencedInterfaces(MacTestData.KillSwitchPlan());
@@ -513,7 +513,7 @@ public sealed class PfAnchorRendererTests
         names.ShouldContain("lo0");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DocumentsTheBestEffortWarningAndTheForbiddenFlag()
     {
         var ruleset = Render(MacTestData.KillSwitchPlan());
@@ -540,7 +540,7 @@ public sealed class PfctlCommandShapeTests
 
     public PfctlCommandShapeTests(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [FactOnNonMacOS]
     public void NeverEmitsTheDisableOrUntokenedEnableFlag()
     {
         var shapes = PfctlCommands.AllShapes();
@@ -561,7 +561,7 @@ public sealed class PfctlCommandShapeTests
         }
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void EmitsExactlyTheResearchedSequence()
     {
         var shapes = PfctlCommands.AllShapes().Select(s => string.Join(' ', s)).ToArray();
@@ -579,7 +579,7 @@ public sealed class PfctlCommandShapeTests
         shapes.ShouldContain("utun0");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void EveryReleaseShapeIsPairedWithAToken()
     {
         foreach (var shape in PfctlCommands.AllShapes())
@@ -595,7 +595,7 @@ public sealed class PfctlCommandShapeTests
         }
     }
 
-    [Theory]
+    [TheoryOnNonMacOS]
     [InlineData("abc")]
     [InlineData("")]
     [InlineData("123456789012345678901")]
@@ -610,27 +610,27 @@ public sealed class PfctlCommandShapeTests
         Should.Throw<ArgumentException>(() => PfctlCommands.Release(token));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ReleaseAcceptsATokenAndPassesItVerbatim()
     {
         PfctlCommands.Release("1234567890").ShouldBe(new[] { "-X", "1234567890" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ReplaceServerTableRefusesToEmptyTheTable()
     {
         // An empty replacement would make the pass rules match nothing and black-hole the tunnel.
         Should.Throw<ArgumentException>(() => PfctlCommands.ReplaceServerTable(Array.Empty<string>()));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ProbeInterfaceRefusesAnUnsafeName()
     {
         Should.Throw<ArgumentException>(() => PfctlCommands.ProbeInterface("utun0; rm -rf /"));
         PfctlCommands.ProbeInterface("utun3").ShouldBe(new[] { "utun3" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheTokenFromPfctlEnableOutput()
     {
         PfctlOutput.TryParseEnableToken("pf enabled\nToken : 1234567890\n", out var token).ShouldBeTrue();
@@ -641,7 +641,7 @@ public sealed class PfctlCommandShapeTests
         bare.ShouldBe("987654321");
     }
 
-    [Theory]
+    [TheoryOnNonMacOS]
     [InlineData("")]
     [InlineData("pf enabled")]
     [InlineData("pfctl: /dev/pf: Permission denied")]
@@ -654,7 +654,7 @@ public sealed class PfctlCommandShapeTests
         token.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void FindsTokensInReferenceListingsWithoutPartialMatches()
     {
         const string references = "pf enabled ref count 2\npid 4711 token 1234567890 added Mon\n";
@@ -667,7 +667,7 @@ public sealed class PfctlCommandShapeTests
         PfctlOutput.ContainsToken(references, "999").ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void StoredTokenRoundTrips()
     {
         var contents = PfctlOutput.RenderStoredToken("1234567890");
@@ -696,7 +696,7 @@ public sealed class PfctlCommandShapeTests
 /// </remarks>
 public sealed class MacOsExecutorGuardTests
 {
-    [Fact]
+    [FactOnNonMacOS]
     public async Task KillSwitchIsNotSupportedAndRefusesEveryCall()
     {
         var runner = MacTestData.MacRunner();
@@ -730,7 +730,7 @@ public sealed class MacOsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task SystemProxyIsNotSupportedAndRefusesEveryCall()
     {
         var runner = MacTestData.MacRunner();
@@ -759,7 +759,7 @@ public sealed class MacOsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task RouteManagerIsNotSupportedAndRefusesEveryCall()
     {
         var runner = MacTestData.MacRunner();
@@ -786,7 +786,7 @@ public sealed class MacOsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task DnsConfiguratorIsNotSupportedAndRefusesEveryCall()
     {
         var runner = MacTestData.MacRunner();
@@ -813,7 +813,7 @@ public sealed class MacOsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task TunDeviceManagerIsNotSupportedAndNeverProbesIfconfig()
     {
         var runner = MacTestData.MacRunner();
@@ -833,7 +833,7 @@ public sealed class MacOsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task ExecutorsRejectAnUnsafeInterfaceNameBeforeTheOperatingSystemGuard()
     {
         // Argument validation happens first: a hostile name must never reach a command runner even if a
@@ -856,7 +856,7 @@ public sealed class NetworksetupCommandTests
 
     public NetworksetupCommandTests(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [FactOnNonMacOS]
     public void SetProxyNeverCarriesTheAuthenticatedSwitch()
     {
         // The documented grammar is "-setwebproxy service domain port authenticated username password",
@@ -889,7 +889,7 @@ public sealed class NetworksetupCommandTests
         }
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void EnablingAndDisablingAreSeparateStateCommands()
     {
         var shapes = NetworksetupCommands.AllShapes().Select(s => string.Join(' ', s)).ToArray();
@@ -907,7 +907,7 @@ public sealed class NetworksetupCommandTests
         }
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ClearingLiteralsMatchTheManPageExactly()
     {
         // The man page documents lowercase 'empty' for -setdnsservers and capitalised 'Empty' for
@@ -919,7 +919,7 @@ public sealed class NetworksetupCommandTests
             .ShouldBe(new[] { "-setproxybypassdomains", "Wi-Fi", "Empty" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesBadValuesBeforeTheyReachArgv()
     {
         Should.Throw<ArgumentException>(() => NetworksetupCommands.SetWebProxy("-evil", "127.0.0.1", 1080));
@@ -930,7 +930,7 @@ public sealed class NetworksetupCommandTests
         Should.Throw<ArgumentException>(() => NetworksetupCommands.SetAutoProxyUrl("Wi-Fi", " "));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void KeepsServiceNamesWithSpacesAsOneArgument()
     {
         var arguments = NetworksetupCommands.SetWebProxy("Thunderbolt Bridge", "127.0.0.1", 10809);
@@ -957,7 +957,7 @@ public sealed class MacSystemProxyPureTests
         + "(2) Thunderbolt Bridge\n"
         + "(Hardware Port: Thunderbolt Bridge, Device: bridge0)\n";
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheServiceListDroppingTheHeaderAndTheDisabledMarker()
     {
         MacSystemProxy.ParseServiceList(ServiceList).ShouldBe(new[] { "Wi-Fi", "Thunderbolt Bridge", "iPhone USB" });
@@ -970,7 +970,7 @@ public sealed class MacSystemProxyPureTests
         MacSystemProxy.ParseServiceList(null).ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheServiceOrderAndTreatsTheFirstEntryAsPrimary()
     {
         var order = MacSystemProxy.ParseServiceOrder(ServiceOrder);
@@ -980,7 +980,7 @@ public sealed class MacSystemProxyPureTests
         order[0].ShouldBe("Wi-Fi");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesProxyGetterOutput()
     {
         var web = MacSystemProxy.ParseProxyEntry(
@@ -1000,7 +1000,7 @@ public sealed class MacSystemProxyPureTests
         pac.Enabled.ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesBypassDomainsIncludingTheEmptySentence()
     {
         MacSystemProxy.ParseBypassDomains("There aren't any bypass domains set on Wi-Fi.\n")
@@ -1010,7 +1010,7 @@ public sealed class MacSystemProxyPureTests
             .ShouldBe(new[] { "*.corp.example", "192.168.0.0/16" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void MergingBypassDomainsKeepsTheUsersOwnEntriesAndAlwaysAddsLoopback()
     {
         var plan = new SystemProxyPlan
@@ -1037,7 +1037,7 @@ public sealed class MacSystemProxyPureTests
         merged.Count(d => string.Equals(d, "localhost", StringComparison.OrdinalIgnoreCase)).ShouldBe(1);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RestoringAManualSnapshotWritesValuesThenStates()
     {
         var commands = MacSystemProxy.BuildRestoreCommands(
@@ -1064,7 +1064,7 @@ public sealed class MacSystemProxyPureTests
         rendered.ShouldNotContain("-setwebproxystate Wi-Fi off");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RestoringAnAutomaticSnapshotKeepsPacAndTurnsManualProxiesOff()
     {
         var commands = MacSystemProxy.BuildRestoreCommands(
@@ -1087,7 +1087,7 @@ public sealed class MacSystemProxyPureTests
         rendered.ShouldContain("-setsocksfirewallproxystate Wi-Fi off");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RestoringADisabledSnapshotTurnsEverythingOff()
     {
         var commands = MacSystemProxy.BuildRestoreCommands(
@@ -1103,7 +1103,7 @@ public sealed class MacSystemProxyPureTests
         rendered.ShouldNotContain("-setwebproxy Wi-Fi proxy.corp 3128");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ResetTurnsEveryProxyOffThroughTheDistinctStateCommands()
     {
         var rendered = MacSystemProxy.BuildResetCommands("Thunderbolt Bridge")
@@ -1121,7 +1121,7 @@ public sealed class MacSystemProxyPureTests
         });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesBracketedIpv6ProxyEndpoints()
     {
         var commands = MacSystemProxy.BuildRestoreCommands(
@@ -1156,7 +1156,7 @@ public sealed class MacRouteManagerPureTests
         + "  interface: en0\n"
         + "      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING,GLOBAL>\n";
 
-    [Fact]
+    [FactOnNonMacOS]
     public void AddsAPointToPointRouteThroughTheInterface()
     {
         var arguments = MacRouteCommands.Add(new RouteEntry
@@ -1171,7 +1171,7 @@ public sealed class MacRouteManagerPureTests
         arguments.ShouldBe(new[] { "-n", "add", "-inet", "0.0.0.0/1", "-interface", "utun3" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void AddsAViaGatewayRouteAndAnIpv6Route()
     {
         MacRouteCommands.Add(new RouteEntry
@@ -1190,7 +1190,7 @@ public sealed class MacRouteManagerPureTests
         }).ShouldBe(new[] { "-n", "add", "-inet6", "8000::/1", "-interface", "utun3" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void DeletesByDestinationAlone()
     {
         // After the tunnel disappears XNU removes its routes, and a destination-only delete is the form
@@ -1204,7 +1204,7 @@ public sealed class MacRouteManagerPureTests
         }).ShouldBe(new[] { "-n", "delete", "-inet", "128.0.0.0/1" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesAnUnsafeInterfaceNameBeforeArgv()
     {
         Should.Throw<ArgumentException>(() => MacRouteCommands.Add(new RouteEntry
@@ -1215,7 +1215,7 @@ public sealed class MacRouteManagerPureTests
         }));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ExpandsADefaultRouteIntoTheDef1Halves()
     {
         var route = new RouteEntry
@@ -1241,7 +1241,7 @@ public sealed class MacRouteManagerPureTests
         v6.Select(h => h.Destination.ToString()).ShouldBe(new[] { "::/1", "8000::/1" });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void LeavesANonDefaultRouteAloneAndDeduplicates()
     {
         var specific = new RouteEntry
@@ -1262,7 +1262,7 @@ public sealed class MacRouteManagerPureTests
         expanded.Count.ShouldBe(2);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void InstallsBypassRoutesBeforeAnythingThatCapturesTheDefault()
     {
         var operations = MacRouteManager.BuildApplySequence(MacTestData.RoutePlan());
@@ -1283,7 +1283,7 @@ public sealed class MacRouteManagerPureTests
         operations[2].FailClosed.ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void TearsDownInTheReverseOrder()
     {
         var operations = MacRouteManager.BuildRemoveSequence(MacTestData.RoutePlan());
@@ -1296,7 +1296,7 @@ public sealed class MacRouteManagerPureTests
         });
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void TreatsAduplicateAddAsIdempotentSuccess()
     {
         // route(4): "The routing code returns EEXIST if requested to duplicate an existing entry."
@@ -1312,7 +1312,7 @@ public sealed class MacRouteManagerPureTests
         MacRouteManager.IsAlreadyGone(new CommandResult(1, string.Empty, "some other failure")).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void JournalRoundTripsAndIgnoresNoise()
     {
         var plan = MacTestData.RoutePlan();
@@ -1339,7 +1339,7 @@ public sealed class MacRouteManagerPureTests
         MacRouteManager.ParseJournal(null).ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesNetstatOutputIncludingClassfulShorthand()
     {
         var routes = MacRouteManager.ParseRoutes(NetstatInet, isIpv6: false);
@@ -1363,7 +1363,7 @@ public sealed class MacRouteManagerPureTests
         MacRouteManager.IsHalfRouteOnTunnel(onLink).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheDefaultRouteLookup()
     {
         var uplink = MacRouteManager.ParseDefaultRoute(DefaultRouteOutput);
@@ -1377,7 +1377,7 @@ public sealed class MacRouteManagerPureTests
         MacRouteManager.ParseDefaultRoute(null).ShouldBeNull();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RecognisesTunnelInterfaceNames()
     {
         MacRouteManager.IsTunnelInterfaceName("utun0").ShouldBeTrue();
@@ -1390,7 +1390,7 @@ public sealed class MacRouteManagerPureTests
         MacRouteManager.IsTunnelInterfaceName(null).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RefusesABypassRouteThatCapturesTheDefault()
     {
         var plan = MacTestData.RoutePlan();
@@ -1443,7 +1443,7 @@ public sealed class MacDnsConfiguratorPureTests
         + "  nameserver[0] : 10.8.0.2\n"
         + "  flags    : Supplemental, Service-specific\n";
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheEmptyDnsServersSentence()
     {
         MacDnsConfigurator.ParseDnsServers("There aren't any DNS Servers set on Wi-Fi.\n").ShouldBeEmpty();
@@ -1451,7 +1451,7 @@ public sealed class MacDnsConfiguratorPureTests
         MacDnsConfigurator.ParseDnsServers(null).ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void CarriesTheNetworkServiceThroughTheAppliedPlan()
     {
         var value = MacDnsConfigurator.FormatPreviousManager("Thunderbolt Bridge");
@@ -1466,7 +1466,7 @@ public sealed class MacDnsConfiguratorPureTests
         MacDnsConfigurator.TryParsePreviousManager(null, out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ResolverFilePathsCannotEscapeTheResolverDirectory()
     {
         MacDnsConfigurator.ResolverFilePath("corp.example").ShouldBe("/etc/resolver/corp.example");
@@ -1483,7 +1483,7 @@ public sealed class MacDnsConfiguratorPureTests
         Should.Throw<ArgumentException>(() => MacDnsConfigurator.ResolverFilePath("../evil"));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void RendersAResolverFileWithTheMarkerAndTheDocumentedPortForm()
     {
         var servers = new[]
@@ -1511,7 +1511,7 @@ public sealed class MacDnsConfiguratorPureTests
         MacDnsConfigurator.ContainsOwnedMarker(null).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesScutilDnsIntoSectionsAndFlags()
     {
         var resolvers = MacDnsConfigurator.ParseScutilDns(ScutilOutput);
@@ -1539,7 +1539,7 @@ public sealed class MacDnsConfiguratorPureTests
         MacDnsConfigurator.ParseScutilDns(null).ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesTheInterfaceOutOfIfIndex()
     {
         MacDnsConfigurator.ParseInterfaceFromIfIndex("14 (en0)").ShouldBe("en0");
@@ -1561,7 +1561,7 @@ public sealed class MacTunDeviceManagerPureTests
         + "\tinet6 fe80::1%utun3 prefixlen 64 scopeid 0x10\n"
         + "\tnd6 options=201<PERFORMNUD,DAD>\n";
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ListsOnlyUtunDevicesInNumericOrder()
     {
         var names = MacTunDeviceManager.ParseInterfaceList(InterfaceList);
@@ -1572,7 +1572,7 @@ public sealed class MacTunDeviceManagerPureTests
         MacTunDeviceManager.ParseInterfaceList("en0 lo0\n").ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ParsesIfconfigAddressesWithoutThePeerAddressOrZoneSuffix()
     {
         var addresses = MacTunDeviceManager.ParseIfconfigAddresses("utun3", IfconfigOutput);
@@ -1583,7 +1583,7 @@ public sealed class MacTunDeviceManagerPureTests
         MacTunDeviceManager.ParseIfconfigAddresses("utun3", null).ShouldBeEmpty();
     }
 
-    [Theory]
+    [TheoryOnNonMacOS]
     [InlineData("0xfffffffc", 30)]
     [InlineData("0xffffffff", 32)]
     [InlineData("0xffffff00", 24)]
@@ -1595,7 +1595,7 @@ public sealed class MacTunDeviceManagerPureTests
         MacTunDeviceManager.PrefixLengthFromHexNetmask(netmask).ShouldBe(expected);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ResolutionPrefersTheRequestedNameThenTheOnlyCandidate()
     {
         var observations = new[]
@@ -1611,7 +1611,7 @@ public sealed class MacTunDeviceManagerPureTests
             new[] { observations[0] }, "utun7", null).ShouldBe("utun0");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ResolutionIdentifiesTheTunnelByItsPointToPointAddress()
     {
         var observations = new[]
@@ -1626,7 +1626,7 @@ public sealed class MacTunDeviceManagerPureTests
             .ShouldBe("utun3");
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ResolutionRefusesToGuessWhenItIsAmbiguous()
     {
         var observations = new[]
@@ -1646,7 +1646,7 @@ public sealed class MacTunDeviceManagerPureTests
             .ShouldBeNull();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public void ValidatesInterfaceNames()
     {
         MacTunDeviceManager.TryGetSafeInterfaceName("utun0", out var safe).ShouldBeTrue();
@@ -1675,7 +1675,7 @@ public sealed class MacNetworkStateManagerTests
 
     public MacNetworkStateManagerTests(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task CleanupAttemptsEveryStepEvenWhenAnEarlierOneFails()
     {
         var proxy = new StubSystemProxy
@@ -1740,7 +1740,7 @@ public sealed class MacNetworkStateManagerTests
         }
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task CleanupIsIdempotentAndFullyCleanWhenEveryStepSucceeds()
     {
         var proxy = new StubSystemProxy();
@@ -1770,7 +1770,7 @@ public sealed class MacNetworkStateManagerTests
         routes.RemoveAllCalls.ShouldBe(2);
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task CleanupWithNullCollaboratorsSucceedsAndSpawnsNothing()
     {
         var runner = MacTestData.MacRunner();
@@ -1794,7 +1794,7 @@ public sealed class MacNetworkStateManagerTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task CleanupReportsCancellationWithoutStoppingTheRemainingSteps()
     {
         var proxy = new StubSystemProxy
@@ -1816,7 +1816,7 @@ public sealed class MacNetworkStateManagerTests
         report.Steps[4].Succeeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task LeftoverDetectionReportsWhatItCheckedAndNeverThrows()
     {
         var runner = MacTestData.MacRunner();
@@ -1835,7 +1835,7 @@ public sealed class MacNetworkStateManagerTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task LeftoverDetectionSurfacesEveryArtefactItFinds()
     {
         var killSwitch = new StubKillSwitch
@@ -1896,7 +1896,7 @@ public sealed class MacNetworkStateManagerTests
         leftovers.Details.ShouldContain(d => d.Contains("dns.leak.plaintext_outside_tunnel"));
     }
 
-    [Fact]
+    [FactOnNonMacOS]
     public async Task LeftoverDetectionDoesNotMistakeAUsersOwnProxyForOurs()
     {
         var proxy = new StubSystemProxy

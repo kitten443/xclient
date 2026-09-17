@@ -80,7 +80,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         AllowLan = allowLan,
     };
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheCatchAllBlockSitsAtWeightZeroAndIsLast()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan()).Value;
@@ -95,7 +95,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Filters.Count(f => f.Action == WfpAction.Block && f.Weight == 0).ShouldBe(2);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void EveryPermitIsStrictlyAboveTheDefaultBlock()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(allowLan: true)).Value;
@@ -113,7 +113,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Filters.ShouldBe(set.Filters.OrderByDescending(f => f.Weight).ToArray());
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheCorePermitCarriesBothTheApplicationIdAndTheUserScope()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan()).Value;
@@ -136,7 +136,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         }
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void APlanWithNoAllowedEndpointIsRefusedRatherThanTranslated()
     {
         var plan = Plan() with { AllowedEndpoints = Array.Empty<AllowedEndpoint>() };
@@ -150,7 +150,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         translated.Error!.MessageKey.ShouldBe("error.killswitch.no_server_endpoint");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void APlanWithNoAllowedApplicationIsRefused()
     {
         var plan = Plan() with { AllowedApplications = Array.Empty<string>() };
@@ -161,7 +161,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         translated.Error!.MessageKey.ShouldBe("error.killswitch.no_allowed_application");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ADisabledPlanIsRefusedBecauseItHasNoFilterSet()
     {
         var translated = WfpKillSwitchPlanTranslator.Translate(Plan(KillSwitchMode.Disabled));
@@ -170,7 +170,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         translated.Error!.Severity.ShouldBe(ErrorSeverity.Warning);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void Ipv6IsBlockedOutrightAndCarriesNoPermits()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(blockIpv6: true)).Value;
@@ -185,7 +185,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Permits.Any(p => p.Layer == WfpLayer.AleAuthConnectV6).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void WithIpv6TunnelledThePermitsExistOnBothLayers()
     {
         var plan = Plan(blockIpv6: false) with
@@ -205,7 +205,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.CatchAllBlockV6.ShouldNotBeNull();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheRecipeWeightsAreTheDocumentedOnes()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(allowLan: true)).Value;
@@ -217,7 +217,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         ((int)set.Filters.Single(f => f.Name == "dhcpv4").Weight).ShouldBe(12);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheTunnelPermitNamesTheInterfaceSymbolically()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan()).Value;
@@ -230,7 +230,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         tunnel.Conditions.Single().Value.ShouldBe("myvpn0");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheResolverPermitCarriesPortAndBothTransports()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan()).Value;
@@ -243,7 +243,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         resolver.Conditions.ShouldContain(c => c.Kind == WfpConditionKind.Protocol && c.Value == "udp");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void LoopbackAndDhcpAreOmittedWhenThePlanDisablesThem()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(
@@ -253,7 +253,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Filters.Any(f => f.Name.StartsWith("dhcp", StringComparison.Ordinal)).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void LanPermitsAreOneFilterPerRange()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(allowLan: true)).Value;
@@ -266,7 +266,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         lan.ShouldAllBe(f => f.Conditions.Count == 1);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AnExplicitlyBlockedDestinationIsNotAlsoPermitted()
     {
         var plan = Plan(
@@ -288,7 +288,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Filters.ShouldContain(f => f.Action == WfpAction.Block && f.Weight == 1);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TranslationIsDeterministic()
     {
         var first = WfpKillSwitchPlanTranslator.Translate(Plan(allowLan: true)).Value;
@@ -297,7 +297,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         first.Filters.Select(f => f.ToString()).ShouldBe(second.Filters.Select(f => f.ToString()));
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void EveryDescriptorIsUniquelyIdentifiedByNameLayerAndFlags()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(blockIpv6: false, allowLan: true)).Value;
@@ -310,7 +310,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         identities.Distinct().Count().ShouldBe(identities.Length);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AlwaysOnProducesPersistentAndBootTimeTwins()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(KillSwitchMode.AlwaysOn)).Value;
@@ -337,7 +337,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
             .ShouldBe(set.Filters.Count(f => f.Flags == WfpFilterFlags.BootTime));
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void OnDemandPlansCarryNoLifetimeFlags()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan(KillSwitchMode.OnDemand)).Value;
@@ -346,7 +346,7 @@ public sealed class WfpKillSwitchPlanTranslatorTests
         set.Filters.ShouldAllBe(f => f.Flags == WfpFilterFlags.None);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheIdentifierFallsBackToTheDefault()
     {
         var set = WfpKillSwitchPlanTranslator.Translate(Plan() with { Identifier = "  " }).Value;
@@ -437,7 +437,7 @@ public sealed class WindowsExecutorGuardTests
         BypassList = "<local>",
     };
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheHostIsNotWindowsSoNoGuardCanBeSatisfied()
     {
         // If this ever fails the whole file's premise is wrong: the guard tests below only prove
@@ -447,7 +447,7 @@ public sealed class WindowsExecutorGuardTests
         WindowsPlatform.IsProcessElevated().ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AdapterEnumerationRefusesWithoutTouchingNativeCode()
     {
         WindowsAdapters.Enumerate(out var error).ShouldBeEmpty();
@@ -460,7 +460,7 @@ public sealed class WindowsExecutorGuardTests
         index.ShouldBe(0U);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void IpForwardTableReadsAndLookupsRefuse()
     {
         WindowsIpForwardTable.Read(ipv6: false, out var error).ShouldBeEmpty();
@@ -470,7 +470,7 @@ public sealed class WindowsExecutorGuardTests
         bestError.ShouldNotBeNull();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheWfpKillSwitchRefusesOnThisHost()
     {
         var killSwitch = new WindowsWfpKillSwitch(isElevated: () => true);
@@ -500,7 +500,7 @@ public sealed class WindowsExecutorGuardTests
         killSwitch.Dispose();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheSystemProxyRefusesOnThisHostWithoutRunningAnything()
     {
         var runner = new FakeCommandRunner();
@@ -529,7 +529,7 @@ public sealed class WindowsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheRouteManagerRefusesOnThisHostWithoutRunningAnything()
     {
         var runner = new FakeCommandRunner();
@@ -559,7 +559,7 @@ public sealed class WindowsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheDnsConfiguratorRefusesOnThisHostWithoutRunningAnything()
     {
         var runner = new FakeCommandRunner();
@@ -586,7 +586,7 @@ public sealed class WindowsExecutorGuardTests
         runner.Calls.ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheTunManagerRefusesOnThisHost()
     {
         var tun = new WindowsTunDeviceManager();
@@ -598,7 +598,7 @@ public sealed class WindowsExecutorGuardTests
         (await tun.GetAddressesAsync("myvpn0", CancellationToken.None)).ShouldBeEmpty();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ExecutorsWithoutElevationStillReportUnsupported()
     {
         // The elevation probe is a *second* gate, never the first: on the wrong OS the answer must
@@ -618,7 +618,7 @@ public sealed class WindowsExecutorGuardTests
 
 public sealed class WindowsRouteCommandTests
 {
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData(0, "0.0.0.0")]
     [InlineData(8, "255.0.0.0")]
     [InlineData(24, "255.255.255.0")]
@@ -628,7 +628,7 @@ public sealed class WindowsRouteCommandTests
         WindowsRouteCommands.MaskFor(prefix).ShouldBe(expected);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AnIpv4HostRouteIsBuiltWithAnExplicitMaskAndInterfaceIndex()
     {
         var arguments = WindowsRouteCommands.AddIpv4(
@@ -640,7 +640,7 @@ public sealed class WindowsRouteCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AnOnLinkIpv4RouteUsesTheZeroGateway()
     {
         var arguments = WindowsRouteCommands.AddIpv4(CidrBlock.Parse("0.0.0.0/0"), gateway: null, 1, 30);
@@ -652,7 +652,7 @@ public sealed class WindowsRouteCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AnIpv4DeleteCarriesTheMaskSoItMatchesOneEntry()
     {
         var arguments = WindowsRouteCommands.DeleteIpv4(CidrBlock.Parse("0.0.0.0/0"), "10.8.0.1", 30);
@@ -660,7 +660,7 @@ public sealed class WindowsRouteCommandTests
         arguments.ShouldBe(new[] { "delete", "0.0.0.0", "mask", "0.0.0.0", "10.8.0.1", "if", "30" });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AnIpv4DeleteOmitsAZeroGateway()
     {
         var arguments = WindowsRouteCommands.DeleteIpv4(CidrBlock.Parse("10.0.0.0/8"), gateway: null, 7);
@@ -668,7 +668,7 @@ public sealed class WindowsRouteCommandTests
         arguments.ShouldBe(new[] { "delete", "10.0.0.0", "mask", "255.0.0.0", "if", "7" });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void Ipv6RoutesGoThroughNetshWithNamedArguments()
     {
         var add = WindowsRouteCommands.AddIpv6(CidrBlock.Parse("::/0"), "fe80::1", 1, "myvpn0");
@@ -688,14 +688,14 @@ public sealed class WindowsRouteCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void Ipv6RoutesAreAlwaysActiveStoreSoARebootIsACleanReset()
     {
         WindowsRouteCommands.AddIpv6(CidrBlock.Parse("::/0"), null, 1, "myvpn0").ShouldContain("store=active");
         WindowsRouteCommands.DeleteIpv6(CidrBlock.Parse("::/0"), null, "myvpn0").ShouldContain("store=active");
     }
 
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("The object already exists.", true)]
     [InlineData("The route specified was not found.", false)]
     public void AlreadyExistsIsRecognisedForIdempotentReApply(string output, bool expected)
@@ -705,7 +705,7 @@ public sealed class WindowsRouteCommandTests
         WindowsRouteCommands.IsAlreadyExists(result).ShouldBe(expected);
     }
 
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("The route specified was not found.", true)]
     [InlineData("The object already exists.", false)]
     public void AlreadyGoneIsRecognisedForIdempotentTeardown(string output, bool expected)
@@ -715,7 +715,7 @@ public sealed class WindowsRouteCommandTests
         WindowsRouteCommands.IsAlreadyGone(result).ShouldBe(expected);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ARealFailureIsNeitherAlreadyExistsNorAlreadyGone()
     {
         var result = new MyVpn.Platform.Abstractions.Execution.CommandResult(
@@ -725,7 +725,7 @@ public sealed class WindowsRouteCommandTests
         WindowsRouteCommands.IsAlreadyGone(result).ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void BypassRoutesArePlannedBeforeAnyDefaultCapturingRoute()
     {
         var plan = new RoutePlan
@@ -768,7 +768,7 @@ public sealed class WindowsRouteCommandTests
         operations.Select(o => o.Route.Interface).ShouldBe(new[] { "Ethernet", "myvpn0" });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TeardownIsTheMirrorImageOfInstallation()
     {
         var plan = new RoutePlan
@@ -820,7 +820,7 @@ public sealed class WindowsRouteCommandTests
 
 public sealed class WindowsDnsCommandTests
 {
-    [Fact]
+    [FactOnNonWindows]
     public void TheFirstResolverIsSetWithTheDocumentedNetshVerb()
     {
         var arguments = WindowsDnsCommands.SetPrimary("myvpn0", "1.1.1.1", ipv6: false);
@@ -832,7 +832,7 @@ public sealed class WindowsDnsCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheSecondResolverIsAddedAtItsIndex()
     {
         var arguments = WindowsDnsCommands.AddServer("myvpn0", "9.9.9.9", index: 2, ipv6: false);
@@ -843,7 +843,7 @@ public sealed class WindowsDnsCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AddingAtTheFirstIndexIsRefused()
     {
         // Index 1 is what `set dns` writes; accepting it here would silently produce two primaries.
@@ -851,7 +851,7 @@ public sealed class WindowsDnsCommandTests
             () => WindowsDnsCommands.AddServer("myvpn0", "9.9.9.9", index: 1, ipv6: false));
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void RestoringHandsTheInterfaceBackToDhcp()
     {
         WindowsDnsCommands.ResetToDhcp("myvpn0", ipv6: false).ShouldBe(new[]
@@ -865,21 +865,21 @@ public sealed class WindowsDnsCommandTests
         });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheIpv6FamilyIsSelectedExplicitly()
     {
         WindowsDnsCommands.SetPrimary("myvpn0", "2001:db8::1", ipv6: true)[1].ShouldBe("ipv6");
         WindowsDnsCommands.SetPrimary("myvpn0", "1.1.1.1", ipv6: false)[1].ShouldBe("ip");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void EmptyInterfaceNamesAreRefusedBeforeTheyReachArgv()
     {
         Should.Throw<ArgumentException>(() => WindowsDnsCommands.SetPrimary(" ", "1.1.1.1", ipv6: false));
         Should.Throw<ArgumentException>(() => WindowsDnsCommands.ResetToDhcp(string.Empty, ipv6: false));
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void NrptRuleKeysAreDeterministicAndDistinct()
     {
         var first = WindowsNrptRules.RuleKeyFor("corp.example.com");
@@ -894,7 +894,7 @@ public sealed class WindowsDnsCommandTests
         first.ToString("D")[14].ShouldBe('5');
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void NrptRulesComeFromTheSplitDnsDomainsAndTheResolvers()
     {
         var plan = new DnsPlan
@@ -915,7 +915,7 @@ public sealed class WindowsDnsCommandTests
         WindowsNrptRules.PolicyConfigPath.ShouldContain("Policies");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void NrptRulesAreEmptyWhenNoServerIsConfigured()
     {
         var plan = new DnsPlan
@@ -929,7 +929,7 @@ public sealed class WindowsDnsCommandTests
         WindowsNrptRules.FromPlan(plan).ShouldBeEmpty();
     }
 
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("corp.example.com", true)]
     [InlineData("a-b_c.example", true)]
     [InlineData("*", false)]
@@ -945,7 +945,7 @@ public sealed class WindowsDnsCommandTests
 
 public sealed class WindowsProxyValueTests
 {
-    [Fact]
+    [FactOnNonWindows]
     public void AFixedProxyPlanBecomesThePerSchemeWinInetValue()
     {
         var values = WindowsProxyValues.FromPlan(new SystemProxyPlan
@@ -966,7 +966,7 @@ public sealed class WindowsProxyValueTests
         values.ProxyOverride.ShouldContain("example.com");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ASocksOnlyPlanAlsoCoversHttps()
     {
         var values = WindowsProxyValues.FromPlan(new SystemProxyPlan
@@ -979,7 +979,7 @@ public sealed class WindowsProxyValueTests
         values.ProxyServer.ShouldBe("socks=127.0.0.1:10808;https=127.0.0.1:10808");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void APacPlanLeavesTheFixedProxySwitchedOff()
     {
         var values = WindowsProxyValues.FromPlan(new SystemProxyPlan
@@ -994,7 +994,7 @@ public sealed class WindowsProxyValueTests
         values.AutoConfigUrl.ShouldBe("http://127.0.0.1:10810/proxy.pac");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void HostRouteBypassesAreExpressibleAndWiderOnesAreReported()
     {
         var values = WindowsProxyValues.FromPlan(new SystemProxyPlan
@@ -1013,7 +1013,7 @@ public sealed class WindowsProxyValueTests
         values.NotExpressibleNetworks.ShouldBe(new[] { "10.0.0.0/8" });
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void TheRegistryWritesCarryTheDocumentedValueNames()
     {
         var values = WindowsProxyValues.FromPlan(new SystemProxyPlan { HttpPort = 10809, SocksPort = 10808 });
@@ -1035,7 +1035,7 @@ public sealed class WindowsProxyValueTests
             @"Software\Microsoft\Windows\CurrentVersion\Internet Settings");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ResetOnlyClearsTheEnableFlagAndThePacUrl()
     {
         var writes = WindowsProxyValues.ResetWrites();
@@ -1050,7 +1050,7 @@ public sealed class WindowsProxyValueTests
         writes.Any(w => w.Name is "ProxyServer" or "ProxyOverride").ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ACapturedSnapshotRoundTripsThroughTheRegistryValues()
     {
         var snapshot = new SystemProxySnapshot
@@ -1077,7 +1077,7 @@ public sealed class WindowsProxyValueTests
         restored.BypassList.ShouldBe("<local>;*.corp");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ADisabledSnapshotRestoresAsDisabled()
     {
         var values = WindowsProxyValues.FromSnapshot(new SystemProxySnapshot
@@ -1091,7 +1091,7 @@ public sealed class WindowsProxyValueTests
         values.AutoConfigUrl.ShouldBeNull();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void APacSnapshotRestoresThePacUrlAndNotAFixedProxy()
     {
         var values = WindowsProxyValues.FromSnapshot(new SystemProxySnapshot
@@ -1106,7 +1106,7 @@ public sealed class WindowsProxyValueTests
         values.ProxyServer.ShouldBeNull();
     }
 
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("http=127.0.0.1:10809;https=127.0.0.1:10809;socks=127.0.0.1:10808", "127.0.0.1:10809", "127.0.0.1:10809", "127.0.0.1:10808")]
     [InlineData("proxy.corp:8080", "proxy.corp:8080", "proxy.corp:8080", null)]
     [InlineData(null, null, null, null)]
@@ -1123,7 +1123,7 @@ public sealed class WindowsProxyValueTests
         parsedSocks.ShouldBe(socks);
     }
 
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("http=127.0.0.1:10809", true)]
     [InlineData("socks=localhost:10808", true)]
     [InlineData("http=proxy.corp:8080", false)]
@@ -1136,7 +1136,7 @@ public sealed class WindowsProxyValueTests
 
 public sealed class WindowsTunInterfaceNameTests
 {
-    [Theory]
+    [TheoryOnNonWindows]
     [InlineData("myvpn0", true)]
     [InlineData("Wintun", true)]
     [InlineData("Local Area Connection", true)]
@@ -1151,7 +1151,7 @@ public sealed class WindowsTunInterfaceNameTests
         WindowsTunDeviceManager.IsValidInterfaceName(name).ShouldBe(expected);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void AControlCharacterInANameIsRefusedAndNotEchoedVerbatim()
     {
         WindowsTunDeviceManager.IsValidInterfaceName("myvpn\n0").ShouldBeFalse();
@@ -1162,7 +1162,7 @@ public sealed class WindowsTunInterfaceNameTests
         error.Message.ShouldNotContain("\n");
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void ANullNameIsRejectedAsAnArgument()
     {
         Should.Throw<ArgumentNullException>(() => WindowsTunDeviceManager.ValidateInterfaceName(null));
@@ -1324,7 +1324,7 @@ internal sealed class ScriptedSystemProxy : ISystemProxy
 
 public sealed class WindowsNetworkStateManagerTests
 {
-    [Fact]
+    [FactOnNonWindows]
     public async Task CleanupRunsTheDocumentedOrderAndAttemptsEveryStep()
     {
         var proxy = new ScriptedSystemProxy
@@ -1376,7 +1376,7 @@ public sealed class WindowsNetworkStateManagerTests
         }
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task AThrowingStepDoesNotPreventTheRemainingOnes()
     {
         var proxy = new ScriptedSystemProxy { ThrowOnReset = new InvalidOperationException("boom") };
@@ -1395,7 +1395,7 @@ public sealed class WindowsNetworkStateManagerTests
         routes.RemoveAllCalls.ShouldBe(1);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task ADeadlineDoesNotAbortTheRemainingSteps()
     {
         var proxy = new ScriptedSystemProxy
@@ -1420,7 +1420,7 @@ public sealed class WindowsNetworkStateManagerTests
         report.Steps.Count(s => s.Succeeded).ShouldBe(4);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task CleanupIsIdempotentWithNoCollaboratorsAtAll()
     {
         var manager = new WindowsNetworkStateManager();
@@ -1438,7 +1438,7 @@ public sealed class WindowsNetworkStateManagerTests
         second.FullyClean.ShouldBe(first.FullyClean);
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task DetectionNeverThrowsWithNullCollaborators()
     {
         var manager = new WindowsNetworkStateManager();
@@ -1460,7 +1460,7 @@ public sealed class WindowsNetworkStateManagerTests
         leftovers.SystemProxySet.ShouldBeFalse();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task DetectionReportsWhatTheCollaboratorsSee()
     {
         var killSwitch = new ScriptedKillSwitch
@@ -1518,7 +1518,7 @@ public sealed class WindowsNetworkStateManagerTests
         leftovers.Details.ShouldContain(d => d.Contains("kill switch orphaned filter", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public async Task TheTunnelInterfaceStepNeverClaimsToHaveRemovedSomethingItDoesNotOwn()
     {
         var manager = new WindowsNetworkStateManager();
@@ -1532,7 +1532,7 @@ public sealed class WindowsNetworkStateManagerTests
         step.TechnicalDetail.ShouldNotBeNull();
     }
 
-    [Fact]
+    [FactOnNonWindows]
     public void InterfaceNameValidationStillAppliesToTheManager()
     {
         Should.Throw<ArgumentException>(() => new WindowsNetworkStateManager(tunnelInterfaceName: "myvpn/0"));
