@@ -344,5 +344,19 @@
   "killswitch.reason.lan": "Доступ к локальной сети разрешён, потому что вы его включили.",
   "killswitch.reason.core_application": "Ядро VPN должно иметь доступ к серверу.",
   "killswitch.reason.blocked_destination": "Вы попросили заблокировать этот адрес.",
-  "killswitch.reason.default_deny": "Всё, что не разрешено выше, блокируется."
+  "killswitch.reason.default_deny": "Всё, что не разрешено выше, блокируется.",
+  "dns.leak.ipv6_resolver": "Настроен IPv6 DNS-сервер, который может пойти мимо туннеля.",
+  "dns.leak.plaintext_outside_tunnel": "Настроен DNS-сервер вне туннеля; запросы могут утекать.",
+  "error.dns.configure_failed": "Не удалось применить настройки DNS.",
+  "error.dns.needs_privileges": "Для изменения DNS нужны права администратора. Установите службу MyVpn.",
+  "error.dns.netsh_failed": "Не удалось изменить настройки DNS через системную утилиту.",
+  "error.dns.no_service": "Не найдено ни одной сетевой службы для настройки.",
+  "error.dns.nrpt_write_failed": "Не удалось записать правила раздельного DNS.",
+  "error.dns.resolver_domain_invalid": "Домен раздельного DNS некорректен.",
+  "error.dns.resolver_file_failed": "Не удалось записать файл распознавателя для домена.",
+  "error.route.bypass_captures_default": "Маршрут, который должен был сохранить доступ к серверу, захватил бы весь трафик, поэтому отклонён.",
+  "error.route.journal_write_failed": "Не удалось сохранить исходные маршруты, поэтому изменение отклонено.",
+  "error.tun.macos_missing": "Туннельный интерфейс не найден.",
+  "route.reason.bypass": "Не даёт собственному подключению VPN уйти в туннель.",
+  "route.reason.tunnel": "Направляет трафик в туннель."
 }

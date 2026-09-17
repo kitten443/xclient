@@ -368,7 +368,7 @@ public static class PfAnchorRenderer
         builder.Append("#     are re-declared below.\n");
         builder.Append(CultureInfo.InvariantCulture,
             $"#   * <{ServerTableName}> is 'persist' and is NEVER initialised with an empty list:\n");
-        builder.Append("#     a table initialised with { } is cleared on load.\n");
+        builder.Append("#     a table initialised with an empty address list is cleared on load.\n");
         builder.Append("#   * The tunnel interface name must be resolved at runtime. PF accepts a name for an\n");
         builder.Append("#     interface that does not exist yet, so a wrong name fails closed and silent.\n");
         builder.Append("#   * DNS is permitted only on the tunnel. That makes a leaked query FAIL rather than\n");
@@ -428,7 +428,8 @@ public static class PfAnchorRenderer
         builder.Append("#     The addresses live in a persistent table so re-resolving the server hostname is\n");
         builder.Append("#     a `pfctl -t myvpn_server -T replace …`, not a ruleset reload that flushes states.\n");
         builder.Append("#     `persist` keeps the table when no rule refers to it. The list is always non-empty:\n");
-        builder.Append("#     a table initialised with { } is cleared on load, which would black-hole the tunnel.\n");
+        builder.Append("#     a table initialised with an empty address list is cleared on load, which would\n");
+        builder.Append("#     black-hole the tunnel.\n");
 
         if (addresses.Length == 0)
         {
@@ -571,7 +572,7 @@ public static class PfAnchorRenderer
                         : string.Empty;
 
                     builder.Append(CultureInfo.InvariantCulture,
-                        $"pass out quick proto {protocols} from any to {endpoint.Destination}{portMatch}\n");
+                        $"pass out quick proto {protocols} from any to {RenderTableAddress(endpoint.Destination)}{portMatch}\n");
                 }
             }
         }

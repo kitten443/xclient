@@ -427,5 +427,19 @@
   "killswitch.reason.lan": "Local network access is allowed because you enabled it.",
   "killswitch.reason.core_application": "The VPN core must be able to reach the server.",
   "killswitch.reason.blocked_destination": "You asked for this destination to be blocked.",
-  "killswitch.reason.default_deny": "Everything not explicitly allowed above is blocked."
+  "killswitch.reason.default_deny": "Everything not explicitly allowed above is blocked.",
+  "dns.leak.ipv6_resolver": "An IPv6 DNS server is configured that may bypass the tunnel.",
+  "dns.leak.plaintext_outside_tunnel": "A DNS server outside the tunnel is configured; queries may leak.",
+  "error.dns.configure_failed": "The DNS settings could not be applied.",
+  "error.dns.needs_privileges": "Changing DNS requires administrative privileges. Install the MyVpn helper.",
+  "error.dns.netsh_failed": "The DNS settings could not be changed through the system tool.",
+  "error.dns.no_service": "No network service was found to configure.",
+  "error.dns.nrpt_write_failed": "The split-DNS policy rules could not be written.",
+  "error.dns.resolver_domain_invalid": "A split-DNS domain is not valid.",
+  "error.dns.resolver_file_failed": "The per-domain resolver file could not be written.",
+  "error.route.bypass_captures_default": "A route meant to keep the server reachable would have captured all traffic instead, so it was rejected.",
+  "error.route.journal_write_failed": "The record of the original routes could not be saved, so the change was refused.",
+  "error.tun.macos_missing": "The tunnel interface was not found.",
+  "route.reason.bypass": "Keeps the VPN's own connection to the server off the tunnel.",
+  "route.reason.tunnel": "Carries traffic into the tunnel."
 }

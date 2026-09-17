@@ -155,6 +155,30 @@ public static class WindowsProxyValues
         };
     }
 
+    /// <summary>
+    /// The registry operations that switch the proxy off without disturbing anything else.
+    /// </summary>
+    /// <remarks>
+    /// Only <c>ProxyEnable</c> is cleared and the PAC URL removed. <c>ProxyServer</c> and
+    /// <c>ProxyOverride</c> are deliberately <i>not</i> written: they are the user's own values, and
+    /// deleting them would mean a user who re-enables manual proxy mode finds an empty box instead
+    /// of the proxy they configured. Emergency cleanup calls this, and it is the only reset that is
+    /// safe without a captured snapshot.
+    /// </remarks>
+    public static IReadOnlyList<WindowsProxyRegistryWrite> ResetWrites() => new[]
+    {
+        new WindowsProxyRegistryWrite(
+            WindowsProxyRegistry.ProxyEnableValue,
+            Delete: false,
+            Dword: 0,
+            Text: null),
+        new WindowsProxyRegistryWrite(
+            WindowsProxyRegistry.AutoConfigUrlValue,
+            Delete: true,
+            Dword: null,
+            Text: null),
+    };
+
     /// <summary>Builds the registry values that restore a captured snapshot.</summary>
     public static WindowsProxyRegistryValues FromSnapshot(SystemProxySnapshot snapshot)
     {
@@ -463,13 +487,7 @@ public sealed class WindowsSystemProxy : ISystemProxy
                 WindowsPlatform.Unsupported("Resetting the WinINET system proxy")));
         }
 
-        var written = WriteValues(new WindowsProxyRegistryValues
-        {
-            ProxyEnable = 0,
-            ProxyServer = ReadString(WindowsProxyRegistry.ProxyServerValue),
-            ProxyOverride = ReadString(WindowsProxyRegistry.ProxyOverrideValue),
-            AutoConfigUrl = null,
-        });
+        var written = Write(WindowsProxyValues.ResetWrites());
 
         if (written.IsFailure)
         {
@@ -517,6 +535,14 @@ public sealed class WindowsSystemProxy : ISystemProxy
     {
         error = null;
 
+        if (!OperatingSystem.IsWindows())
+        {
+            // Defence in depth: the public entry points already refuse on a non-Windows host, and
+            // this second guard is what makes the registry call sites unreachable by construction.
+            error = WindowsPlatform.Unsupported("Reading the WinINET proxy configuration");
+            return null;
+        }
+
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(WindowsProxyRegistry.InternetSettingsPath, writable: false);
@@ -554,8 +580,16 @@ public sealed class WindowsSystemProxy : ISystemProxy
         }
     }
 
-    private static Result WriteValues(WindowsProxyRegistryValues values)
+    private static Result WriteValues(WindowsProxyRegistryValues values) => Write(values.ToWrites());
+
+    /// <summary>Applies a set of registry operations to the WinINET key.</summary>
+    private static Result Write(IReadOnlyList<WindowsProxyRegistryWrite> writes)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return Result.Fail(WindowsPlatform.Unsupported("Writing the WinINET proxy configuration"));
+        }
+
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(
@@ -574,7 +608,7 @@ public sealed class WindowsSystemProxy : ISystemProxy
                     "diagnostics.run"));
             }
 
-            foreach (var write in values.ToWrites())
+            foreach (var write in writes)
             {
                 if (write.Delete)
                 {
@@ -605,16 +639,8 @@ public sealed class WindowsSystemProxy : ISystemProxy
         }
     }
 
-    private static string? ReadString(string name) => ReadValues(out _) is { } values
-        ? name switch
-        {
-            WindowsProxyRegistry.ProxyServerValue => values.ProxyServer,
-            WindowsProxyRegistry.ProxyOverrideValue => values.ProxyOverride,
-            _ => null,
-        }
-        : null;
-
-    private static string? ReadString(RegistryKey key, string name) => key.GetValue(name) as string;
+    private static string? ReadString(RegistryKey key, string name) =>
+        OperatingSystem.IsWindows() ? key.GetValue(name) as string : null;
 
     /// <summary>
     /// Reads a <c>REG_DWORD</c>, tolerating a string.
@@ -626,6 +652,11 @@ public sealed class WindowsSystemProxy : ISystemProxy
     /// </remarks>
     private static int ReadDword(RegistryKey key, string name)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return 0;
+        }
+
         var value = key.GetValue(name);
 
         return value switch

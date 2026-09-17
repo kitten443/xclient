@@ -458,28 +458,11 @@ jobs:
       - name: Adapted third-party code must carry attribution
         shell: bash
         run: |
-          set -uo pipefail
-          # This project may incorporate code adapted from v2rayN, which is GPL-3.0-only.
-          # Adapting it is permitted, but distributing it WITHOUT a provenance header is
-          # both a licence violation and a false statement of authorship. The check is
-          # therefore inverted from "the name must not appear" to "if the name appears in
-          # a source file, that file must declare its origin".
-          status=0
-
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            case "$file" in
-              *tests/*) continue ;;
-            esac
-            if ! head -40 "$file" | grep -qiE 'provenance|adapted from|derived from|v2rayN'; then
-              echo "::error file=$file::This file references v2rayN but has no provenance header."
-              echo "  Add a header naming the upstream file, its licence (GPL-3.0-only), and the"
-              echo "  nature of the change. See docs/provenance.md."
-              status=1
-            fi
-          done < <(grep -rliE 'v2rayN|2dust' src 2>/dev/null | grep -vE '/(obj|bin)/' || true)
-
-          [ "$status" -eq 0 ] || exit "$status"
+          set -euo pipefail
+          # The rule lives in the script, not in shell: an earlier inline version failed any
+          # file that mentioned v2rayN at all, which broke files that merely cite issue #9765,
+          # and passed others by accident. See the script's docstring.
+          python3 build/check-provenance.py
 
       - name: Provenance register must exist and be non-empty
         shell: bash

@@ -185,12 +185,15 @@ public static class NetworksetupCommands
         SetWebProxyState("Wi-Fi", false),
         GetSecureWebProxy("Wi-Fi"),
         SetSecureWebProxy("Wi-Fi", "127.0.0.1", 10809),
+        SetSecureWebProxyState("Wi-Fi", true),
         SetSecureWebProxyState("Wi-Fi", false),
         GetSocksProxy("Wi-Fi"),
         SetSocksProxy("Wi-Fi", "127.0.0.1", 10808),
         SetSocksProxyState("Wi-Fi", true),
+        SetSocksProxyState("Wi-Fi", false),
         GetAutoProxyUrl("Wi-Fi"),
         SetAutoProxyUrl("Wi-Fi", "http://127.0.0.1:10810/proxy.pac"),
+        SetAutoProxyState("Wi-Fi", true),
         SetAutoProxyState("Wi-Fi", false),
         GetBypassDomains("Wi-Fi"),
         SetBypassDomains("Wi-Fi", new[] { "localhost" }),
@@ -491,13 +494,7 @@ public sealed class MacSystemProxy : ISystemProxy
 
         foreach (var service in services)
         {
-            foreach (var arguments in new[]
-                     {
-                         NetworksetupCommands.SetWebProxyState(service, on: false),
-                         NetworksetupCommands.SetSecureWebProxyState(service, on: false),
-                         NetworksetupCommands.SetSocksProxyState(service, on: false),
-                         NetworksetupCommands.SetAutoProxyState(service, on: false),
-                     })
+            foreach (var arguments in BuildResetCommands(service))
             {
                 var result = await RunAsync(arguments, cancellationToken).ConfigureAwait(false);
                 if (!result.Succeeded)
@@ -813,6 +810,24 @@ public sealed class MacSystemProxy : ISystemProxy
 
         return commands;
     }
+
+    /// <summary>
+    /// Builds the sequence that turns every proxy off for one service.
+    /// </summary>
+    /// <remarks>
+    /// Pure, and deliberately only state verbs: reset must not write values, because the plan that
+    /// configured them is gone and guessing a host or port would be worse than leaving the user's own
+    /// values in place for when they re-enable manual mode.
+    /// <c>-setautoproxystate … off</c> is included because a PAC configuration is a proxy too, and one
+    /// pointing at a local port that no longer exists survives a reboot just as a manual proxy does.
+    /// </remarks>
+    public static IReadOnlyList<IReadOnlyList<string>> BuildResetCommands(string service) => new[]
+    {
+        NetworksetupCommands.SetWebProxyState(service, on: false),
+        NetworksetupCommands.SetSecureWebProxyState(service, on: false),
+        NetworksetupCommands.SetSocksProxyState(service, on: false),
+        NetworksetupCommands.SetAutoProxyState(service, on: false),
+    };
 
     // ------------------------------------------------------------------ error mapping (pure)
 

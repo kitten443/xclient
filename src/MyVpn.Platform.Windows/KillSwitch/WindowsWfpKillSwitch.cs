@@ -388,6 +388,7 @@ public sealed class WindowsWfpKillSwitch : IKillSwitch, IDisposable
             }
 
             var keepSession = false;
+            var committed = false;
             var allocations = new List<IntPtr>();
 
             try
@@ -435,6 +436,8 @@ public sealed class WindowsWfpKillSwitch : IKillSwitch, IDisposable
                     // persistent session has nothing to keep alive, so the handle is closed and
                     // the filters remain in the engine.
                     keepSession = !set.PersistAcrossReboot;
+                    committed = true;
+
                     if (keepSession)
                     {
                         _engineHandle = handle;
@@ -448,7 +451,9 @@ public sealed class WindowsWfpKillSwitch : IKillSwitch, IDisposable
                 }
                 finally
                 {
-                    if (!keepSession)
+                    // Aborting a committed transaction is pointless and would mask nothing, so it
+                    // only happens on the paths that actually left work unfinished.
+                    if (!committed)
                     {
                         WkNative.TransactionAbort(handle);
                     }

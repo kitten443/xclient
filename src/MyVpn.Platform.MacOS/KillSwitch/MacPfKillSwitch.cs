@@ -711,9 +711,10 @@ public sealed class MacPfKillSwitch : IKillSwitch
             {
                 DeleteFile(_tokenPath);
             }
-            else if (!failures.Any(f => f.Contains("enable reference", StringComparison.Ordinal)))
+            else
             {
-                // The token is kept on disk so a later attempt can still release it.
+                // The token is deliberately kept on disk so a later attempt can still release it: it is
+                // the only handle MyVpn has on the reference it took.
                 failures.Add(
                     $"releasing the PF enable reference (token {token}) failed: {Trim(released.Combined)}");
             }

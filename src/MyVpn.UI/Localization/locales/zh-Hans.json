@@ -344,5 +344,19 @@
   "killswitch.reason.lan": "因为你已启用，本地网络访问被允许。",
   "killswitch.reason.core_application": "VPN 核心必须能够访问服务器。",
   "killswitch.reason.blocked_destination": "你要求阻断此目标。",
-  "killswitch.reason.default_deny": "上面未明确允许的一切都会被阻断。"
+  "killswitch.reason.default_deny": "上面未明确允许的一切都会被阻断。",
+  "dns.leak.ipv6_resolver": "配置了可能绕过隧道的 IPv6 DNS 服务器。",
+  "dns.leak.plaintext_outside_tunnel": "配置了隧道外的 DNS 服务器，查询可能泄漏。",
+  "error.dns.configure_failed": "无法应用 DNS 设置。",
+  "error.dns.needs_privileges": "修改 DNS 需要管理员权限。请安装 MyVpn 服务。",
+  "error.dns.netsh_failed": "无法通过系统工具修改 DNS 设置。",
+  "error.dns.no_service": "未找到可配置的网络服务。",
+  "error.dns.nrpt_write_failed": "无法写入分流 DNS 策略规则。",
+  "error.dns.resolver_domain_invalid": "分流 DNS 域名无效。",
+  "error.dns.resolver_file_failed": "无法写入按域解析器文件。",
+  "error.route.bypass_captures_default": "本应保持服务器可达的路由会接管全部流量，因此已拒绝。",
+  "error.route.journal_write_failed": "无法保存原始路由记录，因此已拒绝更改。",
+  "error.tun.macos_missing": "未找到隧道接口。",
+  "route.reason.bypass": "使 VPN 自身到服务器的连接不进入隧道。",
+  "route.reason.tunnel": "将流量送入隧道。"
 }
