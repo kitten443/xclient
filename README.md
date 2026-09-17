@@ -1,5 +1,7 @@
 # MyVpn
 
+> 🇷🇺 [Русская версия](README.ru.md) · English
+
 A cross-platform desktop VPN client built on **Xray-core only**, using Xray's
 **native TUN inbound** as the sole network core. Written in C# / .NET 8 with
 Avalonia UI, Clean Architecture + MVVM + dependency injection, a Platform
