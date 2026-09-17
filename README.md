@@ -213,10 +213,20 @@ Verified by inspecting the source tree and building it.
   [--kill-switch off|on-demand|always-on]`. Verified against a live subscription:
   exit address distinct from the host's own, across XHttp+TLS, XHttp+REALITY and
   gRPC+REALITY profiles.
-* `MyVpn.Platform.Linux` executors: `ICommandRunner` (argv only, never a shell),
-  `NftablesKillSwitch` (verified by applying and reading back inside a real kernel
-  network namespace) and `LinuxSystemProxy` (GSettings, including the `none`/`manual`/
-  `auto` mode triad so a corporate PAC configuration is restored faithfully).
+* **Executor layers for all three platforms**, plus an `IPlatformServices` factory each:
+  * **Linux** — `NftablesKillSwitch` (verified by applying and reading back inside a real
+    kernel network namespace), `LinuxRouteManager`, `LinuxDnsConfigurator`,
+    `LinuxSystemProxy`, `LinuxTunDeviceManager`, `LinuxNetworkStateManager`.
+  * **Windows** — `WindowsWfpKillSwitch` with a pure plan→WFP-descriptor translator,
+    `WindowsSystemProxy` (WinINet registry), `WindowsRouteManager`, `WindowsDnsConfigurator`,
+    `WindowsTunDeviceManager`, `WindowsNetworkStateManager`.
+  * **macOS** — `PfAnchorRenderer` (pure) and `MacPfKillSwitch`, `MacSystemProxy`,
+    `MacRouteManager`, `MacDnsConfigurator`, `MacTunDeviceManager`,
+    `MacNetworkStateManager`.
+  Every external command is an argv vector; there is no `sh -c` in any platform layer, and
+  the Windows system-proxy and TUN executors deliberately use P/Invoke instead of shelling
+  out. Kill-switch rule sets are rendered by pure functions that are unit-tested, and the
+  executors read the platform back rather than trusting an exit code.
 * A test suite: 782 cases in `MyVpn.Core.Tests`, 66 in
   `MyVpn.Infrastructure.Tests`, 34 in `MyVpn.Platform.Tests`, 5 in
   `MyVpn.Integration.Tests` — 887 total.
@@ -229,10 +239,16 @@ Verified by inspecting the source tree and building it.
   network" button). In progress.
 * **TUN mode end to end.** The config builder emits it and the executors are being
   written; it has not yet been exercised against a real server.
-* **Windows and macOS executors** — deliberately not started. They cannot be compiled
-  or run on the development platform, so they would be unverifiable code. Write-only
-  platform layers should be added when a runner for those systems is available.
-* **Process routing** on any platform (see ADR-0007 for the honest capability matrix).
+* **Runtime verification on Windows and macOS.** The executors compile and their pure parts
+  are unit-tested, but nothing has been executed on those operating systems: WFP, PF,
+  WinINet, `networksetup`, `route.exe`/`route`, `netsh` and the adapter APIs are all
+  unverified at run time. CI runners for those platforms have the necessary privileges, so
+  this is a matter of adding the jobs, not of hardware.
+* **TUN mode end to end.** The config builder emits it and the executors exist, but it has
+  not been exercised: it needs `CAP_NET_ADMIN` on a real network namespace.
+* **Process routing enforcement** on every platform. Enumeration is implemented; enforcement
+  is not, and `ApplyAsync` refuses rather than silently doing nothing. See ADR-0007 for the
+  per-platform capability matrix and why the ceilings differ.
 * The authenticated IPC transport in `MyVpn.Ipc` and the real privileged
   service implementation behind it. Until it exists, the Kill Switch reports
   "present but needs privileges" rather than pretending to be armed.
