@@ -6,8 +6,11 @@ using MyVpn.Core.Geo;
 using MyVpn.Core.Results;
 using MyVpn.Core.Settings;
 using MyVpn.Core.Xray;
+using MyVpn.Platform.Abstractions.Dns;
 using MyVpn.Platform.Abstractions.KillSwitch;
 using MyVpn.Platform.Abstractions.Proxy;
+using MyVpn.Platform.Abstractions.Routing;
+using MyVpn.Core.Net;
 
 namespace MyVpn.Application.Connection;
 
@@ -112,12 +115,16 @@ public sealed class VpnSession : IVpnSession
     private readonly IConnectionVerifier _verifier;
     private readonly IKillSwitch? _killSwitch;
     private readonly ISystemProxy? _systemProxy;
+    private readonly IRouteManager? _routes;
+    private readonly IDnsConfigurator? _dns;
     private readonly ILogger<VpnSession> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private ConnectionSnapshot _snapshot;
     private KillSwitchPlan? _armedPlan;
     private SystemProxySnapshot? _proxySnapshot;
+    private RoutePlan? _appliedRoutePlan;
+    private DnsPlan? _appliedDnsPlan;
 
     public VpnSession(
         VpnStateMachine stateMachine,
@@ -130,6 +137,8 @@ public sealed class VpnSession : IVpnSession
         IConnectionVerifier verifier,
         IKillSwitch? killSwitch,
         ISystemProxy? systemProxy,
+        IRouteManager? routes,
+        IDnsConfigurator? dns,
         ILogger<VpnSession> logger)
     {
         _stateMachine = stateMachine ?? throw new ArgumentNullException(nameof(stateMachine));
@@ -142,6 +151,8 @@ public sealed class VpnSession : IVpnSession
         _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
         _killSwitch = killSwitch;
         _systemProxy = systemProxy;
+        _routes = routes;
+        _dns = dns;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _snapshot = new ConnectionSnapshot { State = _stateMachine.Current };
@@ -425,6 +436,19 @@ public sealed class VpnSession : IVpnSession
             return Fail(proxyResult.Error!, warnings);
         }
 
+        // ---- 7c. give the tunnel an interface, routes and DNS --------------------
+        var networking = await ApplyTunNetworkingAsync(settings, endpoints, warnings, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (networking.IsFailure)
+        {
+            await RollbackAsync(disarmKillSwitch: true, stopCore: true, deleteConfig: true,
+                cancellationToken: cancellationToken, restoreProxy: true,
+                restoreNetworking: true).ConfigureAwait(false);
+
+            return Fail(networking.Error!, warnings);
+        }
+
         // ---- 8. verify with real traffic ---------------------------------------
         ConnectionVerification? verification = null;
 
@@ -497,7 +521,7 @@ public sealed class VpnSession : IVpnSession
             _stateMachine.TryTransitionTo(VpnConnectionState.Disconnecting, "user-disconnect");
 
             await RollbackAsync(disarmKillSwitch: true, stopCore: true, deleteConfig: true,
-                cancellationToken, restoreProxy: true).ConfigureAwait(false);
+                cancellationToken, restoreProxy: true, restoreNetworking: true).ConfigureAwait(false);
 
             _stateMachine.TryTransitionTo(VpnConnectionState.Disconnected, "disconnected");
 
@@ -597,6 +621,161 @@ public sealed class VpnSession : IVpnSession
         }
 
         _logger.LogInformation("System proxy configured to {Proxy}.", state.ActiveProxy);
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Gives the TUN interface its routes and resolver.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only meaningful in <see cref="TunnelMode.Tun"/>. In system-proxy mode the core hijacks
+    /// port 53 through its own outbound, so the operating system's resolver does not need to
+    /// change — and changing it would require elevation for no benefit.
+    /// </para>
+    /// <para>
+    /// <b>Bypass routes come first, and their failure is fatal.</b> They are host routes that keep
+    /// the core's own connection to the server on the physical uplink. Installing a default route
+    /// before them would send that connection into the tunnel it is still building, which presents
+    /// as "connects and then immediately stalls". The route executor enforces the order; this
+    /// method refuses to continue when the bypass could not be established.
+    /// </para>
+    /// </remarks>
+    private async Task<Result> ApplyTunNetworkingAsync(
+        AppSettings settings,
+        IReadOnlyList<ServerEndpoint> endpoints,
+        ICollection<MyVpnError> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (settings.TunnelMode != TunnelMode.Tun)
+        {
+            return Result.Ok();
+        }
+
+        if (_routes is null || _dns is null)
+        {
+            warnings.Add(new MyVpnError(
+                ErrorCodes.PlatformUnsupported,
+                "error.platform.unsupported",
+                ErrorSeverity.Warning,
+                "TUN mode was selected but this build has no route or DNS executor, so traffic will "
+                + "not be captured. Use system-proxy mode, or install a build with the platform layer."));
+
+            return Result.Ok();
+        }
+
+        var interfaceName = string.IsNullOrWhiteSpace(settings.Tun.InterfaceName)
+            ? "myvpn0"
+            : settings.Tun.InterfaceName!;
+
+        var uplinkResult = await _routes.GetDefaultUplinkAsync(cancellationToken).ConfigureAwait(false);
+        if (uplinkResult.IsFailure)
+        {
+            return Result.Fail(uplinkResult.Error!);
+        }
+
+        var uplink = uplinkResult.Value;
+
+        // Host routes to the server, so the core's own traffic never enters the tunnel.
+        var bypass = endpoints
+            .Select(endpoint => new RouteEntry
+            {
+                Destination = CidrBlock.Parse(
+                    endpoint.IsIpLiteral ? endpoint.Address : throw new InvalidOperationException(
+                        "Endpoint resolution must yield IP literals before routes are built.")),
+                Gateway = uplink.GatewayAddress,
+                Interface = uplink.InterfaceName,
+                Metric = 1,
+                ReasonKey = "route.reason.vpn_server",
+            })
+            .ToArray();
+
+        var excluded = settings.Tun.ExcludedRoutes
+            .Select(text => CidrBlock.TryParse(text, out var block) ? block : (CidrBlock?)null)
+            .Where(block => block.HasValue)
+            .Select(block => block!.Value)
+            .ToArray();
+
+        var plan = new RoutePlan
+        {
+            TunnelInterface = interfaceName,
+            PhysicalInterface = uplink.InterfaceName,
+
+            // Point-to-point interfaces need no gateway: `dev <iface>` is the correct form, and
+            // naming a gateway here would be rejected or silently ignored.
+            TunnelRoutes = new[]
+            {
+                new RouteEntry
+                {
+                    Destination = CidrBlock.Parse("0.0.0.0/0"),
+                    Gateway = null,
+                    Interface = interfaceName,
+                    Metric = 1,
+                    ReasonKey = "route.reason.default_v4",
+                    DisplacesDefaultRoute = !uplink.IsIpv6,
+                },
+                new RouteEntry
+                {
+                    Destination = CidrBlock.Parse("::/0"),
+                    Gateway = null,
+                    Interface = interfaceName,
+                    Metric = 1,
+                    ReasonKey = "route.reason.default_v6",
+                },
+            },
+            BypassRoutes = bypass,
+            ExcludedDestinations = excluded,
+        };
+
+        var validation = plan.Validate();
+        if (validation.IsFailure)
+        {
+            return validation;
+        }
+
+        var applied = await _routes.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+        if (applied.IsFailure)
+        {
+            return applied;
+        }
+
+        _appliedRoutePlan = plan;
+
+        // ---- resolver ----------------------------------------------------------
+        // The TUN inbound's `dns` field performs assignment on Windows only, so on Linux the
+        // resolver has to be pointed at the tunnel by the platform layer.
+        if (settings.Dns.Mode == DnsMode.System)
+        {
+            return Result.Ok();
+        }
+
+        var dnsPlan = new DnsPlan
+        {
+            TunnelInterface = interfaceName,
+            Servers = settings.Dns.Servers
+                .Where(NetworkText.IsIpAddress)
+                .Select(address => new DnsServerEntry { Address = address })
+                .ToArray(),
+            SplitDnsDomains = settings.Dns.SplitDnsDomains,
+            BlockPlainDnsLeaks = settings.Dns.BlockPlainDnsLeaks,
+            EnableFakeDns = settings.Dns.EnableFakeDns,
+        };
+
+        var dnsValidation = dnsPlan.Validate();
+        if (dnsValidation.IsFailure)
+        {
+            return dnsValidation;
+        }
+
+        var dnsApplied = await _dns.ApplyAsync(dnsPlan, cancellationToken).ConfigureAwait(false);
+        if (dnsApplied.IsFailure)
+        {
+            return Result.Fail(dnsApplied.Error!);
+        }
+
+        // Hold the plan the executor actually applied, including the state it captured first, so
+        // teardown can restore the user's own resolvers.
+        _appliedDnsPlan = dnsApplied.Value;
         return Result.Ok();
     }
 
@@ -703,7 +882,8 @@ public sealed class VpnSession : IVpnSession
         bool stopCore,
         bool deleteConfig,
         CancellationToken cancellationToken,
-        bool restoreProxy = false)
+        bool restoreProxy = false,
+        bool restoreNetworking = false)
     {
         // Every step is attempted even if an earlier one fails: a cleanup that stops at the first
         // error is exactly the situation the user is trying to escape.
@@ -722,6 +902,30 @@ public sealed class VpnSession : IVpnSession
             }
 
             _proxySnapshot = null;
+        }
+
+        // DNS is restored before the interface disappears: reverting a resolver bound to an
+        // interface that no longer exists fails, and the stale override would outlive the tunnel.
+        if (restoreNetworking && _appliedDnsPlan is not null && _dns is not null)
+        {
+            var restored = await _dns.RestoreAsync(_appliedDnsPlan, cancellationToken).ConfigureAwait(false);
+            if (restored.IsFailure)
+            {
+                _logger.LogError("Failed to restore DNS during rollback: {Error}", restored.Error);
+            }
+
+            _appliedDnsPlan = null;
+        }
+
+        if (restoreNetworking && _appliedRoutePlan is not null && _routes is not null)
+        {
+            var removed = await _routes.RemoveAsync(_appliedRoutePlan, cancellationToken).ConfigureAwait(false);
+            if (removed.IsFailure)
+            {
+                _logger.LogError("Failed to remove routes during rollback: {Error}", removed.Error);
+            }
+
+            _appliedRoutePlan = null;
         }
 
         if (stopCore && _core.State != CoreState.Stopped)

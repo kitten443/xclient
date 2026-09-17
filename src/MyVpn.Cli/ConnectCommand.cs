@@ -12,7 +12,9 @@ using MyVpn.Infrastructure.Net;
 using MyVpn.Infrastructure.Subscriptions;
 using MyVpn.Infrastructure.Xray;
 using MyVpn.Platform.Linux.KillSwitch;
+using MyVpn.Platform.Linux.Dns;
 using MyVpn.Platform.Linux.Proxy;
+using MyVpn.Platform.Linux.Routing;
 
 namespace MyVpn.Cli;
 
@@ -166,6 +168,11 @@ internal static class ConnectCommand
             systemProxy: args.Contains("--system-proxy", StringComparer.OrdinalIgnoreCase)
                 ? new LinuxSystemProxy()
                 : null,
+
+            // Routes and DNS are only consulted in TUN mode; in system-proxy mode the core
+            // hijacks port 53 itself, so the operating system's resolver is left alone.
+            routes: new LinuxRouteManager(),
+            dns: new LinuxDnsConfigurator(),
             loggerFactory.CreateLogger<VpnSession>());
 
         session.SnapshotChanged += (_, snapshot) =>

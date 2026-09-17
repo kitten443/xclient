@@ -256,24 +256,24 @@ public sealed class LinuxDnsConfigurator : IDnsConfigurator
         };
     }
 
-    public async Task<Result> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken)
+    public async Task<Result<DnsPlan>> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
         var validation = plan.Validate();
         if (validation.IsFailure)
         {
-            return validation;
+            return Result<DnsPlan>.Fail(validation.Error!);
         }
 
         if (!_isElevated())
         {
-            return Result.Fail(NotElevated());
+            return Result<DnsPlan>.Fail(NotElevated());
         }
 
         if (!IsSafeLinkName(plan.TunnelInterface))
         {
-            return Result.Fail(new MyVpnError(
+            return Result<DnsPlan>.Fail(new MyVpnError(
                 ErrorCodes.DnsConfigureFailed,
                 "error.dns.invalid_link_name",
                 ErrorSeverity.Error,
@@ -287,12 +287,12 @@ public sealed class LinuxDnsConfigurator : IDnsConfigurator
             // A plan with no resolver is "let the system decide"; there is nothing to configure and
             // nothing to read back. The leak blocking itself is the Kill Switch's and the DNS
             // guard's job, not this executor's.
-            return Result.Ok();
+            return Result<DnsPlan>.Ok(plan);
         }
 
         var backend = await DetectBackendAsync(cancellationToken).ConfigureAwait(false);
 
-        return backend switch
+        var applied = backend switch
         {
             LinuxDnsBackend.SystemdResolved =>
                 await ApplySystemdResolvedAsync(plan, cancellationToken).ConfigureAwait(false),
@@ -302,6 +302,12 @@ public sealed class LinuxDnsConfigurator : IDnsConfigurator
                 await ApplyDirectResolvConfAsync(plan, cancellationToken).ConfigureAwait(false),
             _ => Result.Fail(NoBackend()),
         };
+
+        // The caller needs the prior state in order to undo this, and it must be able to get it
+        // through the interface rather than by knowing this type.
+        return applied.IsSuccess
+            ? Result<DnsPlan>.Ok(MergeRecordedState(plan))
+            : Result<DnsPlan>.Fail(applied.Error!);
     }
 
     public async Task<Result> RestoreAsync(DnsPlan plan, CancellationToken cancellationToken)

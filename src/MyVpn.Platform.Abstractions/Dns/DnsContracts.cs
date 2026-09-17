@@ -111,7 +111,18 @@ public interface IDnsConfigurator
 {
     bool IsSupported { get; }
 
-    Task<Result> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken);
+    /// <summary>
+    /// Applies the plan and returns the plan that was actually applied.
+    /// </summary>
+    /// <remarks>
+    /// The returned plan carries the state captured <i>before</i> the change, which the caller
+    /// must hold in order to restore it. Returning it is the whole point: <see cref="DnsPlan"/> is
+    /// immutable and <see cref="Result"/> carries no value, so an implementation that captured the
+    /// prior state internally would have to expose it some other way, and the caller would have to
+    /// know the concrete type. A session must be able to restore DNS through the abstraction
+    /// alone.
+    /// </remarks>
+    Task<Result<DnsPlan>> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken);
 
     /// <summary>Restores the configuration recorded in the plan.</summary>
     Task<Result> RestoreAsync(DnsPlan plan, CancellationToken cancellationToken);

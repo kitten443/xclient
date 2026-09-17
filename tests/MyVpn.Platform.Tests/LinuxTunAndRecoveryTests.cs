@@ -669,8 +669,8 @@ public sealed class LinuxTunAndRecoveryTests
 
         public bool IsSupported => true;
 
-        public Task<Result> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken) =>
-            Task.FromResult(Result.Ok());
+        public Task<Result<DnsPlan>> ApplyAsync(DnsPlan plan, CancellationToken cancellationToken) =>
+            Task.FromResult(Result<DnsPlan>.Ok(plan));
 
         public Task<Result> RestoreAsync(DnsPlan plan, CancellationToken cancellationToken) =>
             Task.FromResult(Result.Ok());
