@@ -31,9 +31,13 @@ catch it because the defect looks like working code.
 | Wintun | GPL-2.0 / prebuilt-binary licence | see `NOTICE`; the unmodified signed DLL may be redistributed, its embedded driver may not be extracted |
 
 Because v2rayN is GPL-3.0-**only**, the combined distribution is offered under
-`GPL-3.0-only` (see `Directory.Build.props`). Our own files retain their "or later"
-grant, but that additional permission cannot be extended over someone else's
-GPL-3.0-only code.
+`GPL-3.0-only` (see `Directory.Build.props`). This matches what the repository actually
+grants: the top-level `LICENSE` is the bare GNU GPL version 3 text, and it carries no
+version-election statement, so no file in this project grants the "or any later version"
+option. Nothing here extends the "or later" permission over someone else's GPL-3.0-only
+code, because no such permission exists in this repository to begin with. If the project
+ever wants to offer GPL-3.0-or-later for its own original files, that requires an explicit
+written grant in `LICENSE` or a per-file notice — it must not be asserted in prose alone.
 
 ## Register
 

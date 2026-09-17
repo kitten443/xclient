@@ -5,12 +5,15 @@ A cross-platform desktop VPN client built on **Xray-core only**, using Xray's
 Avalonia UI, Clean Architecture + MVVM + dependency injection, a Platform
 Abstraction Layer, and a separate privileged helper service.
 
-> **Status: foundation, not a finished 1.0.** The solution builds cleanly, the
-> domain layer and the platform-abstraction contracts are implemented, and a
-> test suite exists — but some tests are currently failing, the integration
-> suite is empty, and the platform executors, IPC transport and real UI wiring
-> are still planned. See [Current status](#current-status-honest) before you
-> rely on anything.
+> **Status: working client, pre-release.** The solution builds clean (zero warnings,
+> zero analyzer diagnostics, `TreatWarningsAsErrors=true`) and the full suite of
+> **1270 tests passes green in two consecutive runs**, including a rootless end-to-end
+> test that brings up a real Xray TUN tunnel, real nftables Kill Switch rules and real
+> routes inside a throwaway network namespace. It has been exercised against a live
+> subscription in proxy mode. It is **not a finished 1.0**: runtime verification on
+> Windows and macOS has not happened, the privileged service and its IPC transport are
+> not implemented, and TUN mode has not been run against a real remote server. See
+> [Current status](#current-status-honest) before you rely on anything.
 
 ## What it is
 
@@ -100,29 +103,30 @@ The build is a real gate: `Directory.Build.props` sets
 `TreatWarningsAsErrors=true` and `EnableNETAnalyzers=true`, so a green build
 means zero warnings and zero analyzer diagnostics as well as zero errors.
 
-Test. The suite exists and runs; **9 of the 696 `MyVpn.Core.Tests` cases
-currently fail**, so this is expected to be red:
+Test. The suite is green; the last verification was two consecutive full runs, both
+1270 passed / 0 failed:
 
 ```bash
 dotnet test MyVpn.sln -c Release --no-build --collect:"XPlat Code Coverage"
 ```
 
-Known failures at the last verification (all in `tests/MyVpn.Core.Tests`, and
-all genuine disagreements between the tests and the implementation rather than
-flakiness): `GeoAssetValidatorTests` (4 cases — including one expecting failure
-code `truncated_entry` where the validator returns `malformed_entry`),
-`ProtoReaderTests.Reads_a_single_byte_varint`, `CidrBlockTests.Parses_a_bracketed_ipv6_literal`,
-`ServerScoreTests.Score_is_always_within_zero_and_one_hundred`,
-`UrlSafetyTests.A_relative_url_is_rejected`, and
-`RawHeaderBagTests.Rejected_headers_record_the_reason_and_length`.
+| Project | Tests | What it covers |
+|---|---|---|
+| `MyVpn.Core.Tests` | 811 | domain, settings, parsing, geo validation, config building |
+| `MyVpn.Platform.Tests` | 383 | platform executors and their pure plan renderers |
+| `MyVpn.Infrastructure.Tests` | 66 | engine, geo manager, adapters, diagnostics |
+| `MyVpn.Integration.Tests` | 8 | share link → config → real loopback Xray server |
+| `MyVpn.Rootless.Tests` | 2 | real TUN, real routes, real nftables inside `unshare` |
 
-`tests/MyVpn.Integration.Tests` is configured but contains no tests yet, so that
-leg passes vacuously (`dotnet test` reports "No test is available" and exits 0).
+Privileged tests (real TUN, real firewall, real routes) carry the xunit trait
+`Category = "RequiresRoot"`. `MyVpn.Rootless.Tests` deliberately does **not**: it runs
+both tunnel ends inside `unshare -rmn`, so a real kernel data path is exercised without
+root. Let the namespace set up its own veth pair — running it under a plain `unshare -rn`
+with no uplink makes the route assertions vacuous.
 
-Privileged tests (real TUN, real firewall, real routes) are expected to carry the
-xunit trait `Category = "RequiresRoot"`. On Linux CI the pipeline filters them
-out with `--filter "Category!=RequiresRoot"`; Windows and macOS runners have
-passwordless elevation and run everything.
+Note that these tests must not be run concurrently with each other: they share the
+host's network-namespace resources, and a second concurrent run has been observed to make
+the far side of the tunnel miss its readiness deadline.
 
 Formatting and analyzers:
 
@@ -197,8 +201,8 @@ Verified by inspecting the source tree and building it.
   meaningful exit codes: 3 = geo data unusable, 4 = warnings, 5 = errors).
 * Entry points for `MyVpn.UI` (Avalonia `App`/`MainWindow`, a
   `MainWindowViewModel` and a JSON localization service with `en`/`ru`/`zh-Hans`
-  locales, 196 keys each) and `MyVpn.Service` (privilege and capability
-  pre-flight).
+  locales, 479 keys in `en` and 396 in each translation, switchable at runtime) and
+  `MyVpn.Service` (privilege and capability pre-flight).
 * `MyVpn.Application`: the connect path. `VpnSession` sequences validate → locate →
   resolve → geo → build → stage → **arm the Kill Switch → start the core → point the
   desktop at the tunnel** → verify with a real request, and tears down in reverse. A
@@ -227,55 +231,54 @@ Verified by inspecting the source tree and building it.
   the Windows system-proxy and TUN executors deliberately use P/Invoke instead of shelling
   out. Kill-switch rule sets are rendered by pure functions that are unit-tested, and the
   executors read the platform back rather than trusting an exit code.
-* A test suite: 782 cases in `MyVpn.Core.Tests`, 66 in
-  `MyVpn.Infrastructure.Tests`, 34 in `MyVpn.Platform.Tests`, 5 in
-  `MyVpn.Integration.Tests` — 887 total.
+* A test suite: 811 cases in `MyVpn.Core.Tests`, 383 in
+  `MyVpn.Platform.Tests`, 66 in `MyVpn.Infrastructure.Tests`, 8 in
+  `MyVpn.Integration.Tests` and 2 rootless end-to-end cases — **1270 total, all
+  green.**
 
 **Planned:**
 
-* Geo-data **download** (fetching from a source with SHA-256 from a signed
-  manifest). Atomic install/rollback/repair exist; the network fetch does not.
-* Linux **route** and **DNS** executors, and `INetworkStateManager` (the "Restore
-  network" button). In progress.
-* **TUN mode end to end.** The config builder emits it and the executors are being
-  written; it has not yet been exercised against a real server.
 * **Runtime verification on Windows and macOS.** The executors compile and their pure parts
   are unit-tested, but nothing has been executed on those operating systems: WFP, PF,
   WinINet, `networksetup`, `route.exe`/`route`, `netsh` and the adapter APIs are all
   unverified at run time. CI runners for those platforms have the necessary privileges, so
   this is a matter of adding the jobs, not of hardware.
-* **TUN mode end to end.** The config builder emits it and the executors exist, but it has
-  not been exercised: it needs `CAP_NET_ADMIN` on a real network namespace.
-* **Process routing enforcement** on every platform. Enumeration is implemented; enforcement
-  is not, and `ApplyAsync` refuses rather than silently doing nothing. See ADR-0007 for the
-  per-platform capability matrix and why the ceilings differ.
-* The authenticated IPC transport in `MyVpn.Ipc` and the real privileged
+* **TUN mode against a real remote server.** It is exercised end to end against a real Xray
+  core inside a network namespace (`MyVpn.Rootless.Tests`, green), and proxy mode is verified
+  against a live subscription — but a full-tunnel session to a real remote endpoint has not
+  been run.
+* **Process routing on Windows and macOS.** Linux enforcement exists (cgroup v2 + nftables +
+  policy routing). Elsewhere `ApplyAsync` refuses rather than silently doing nothing. See
+  ADR-0007 for the per-platform capability matrix and why the ceilings differ.
+* **The authenticated IPC transport** in `MyVpn.Ipc` and the real privileged
   service implementation behind it. Until it exists, the Kill Switch reports
-  "present but needs privileges" rather than pretending to be armed.
-* The real UI: DI composition, remaining view models/views, theme service,
-  settings persistence and OS-keystore secret storage. The main screen exists but its
-  Connect button still drives the state machine directly instead of `VpnSession`.
-* Geo-data **download**.
-* Integration tests (`tests/MyVpn.Integration.Tests` is empty).
+  "present but needs privileges" rather than pretending to be armed, and the platform
+  executors run in-process.
+* **The remaining UI**: theme service, settings persistence, OS-keystore secret storage, and
+  the Advanced Mode surfaces. The main screen, server list, subscription import, diagnostics
+  and settings views exist, and Connect drives the real `VpnSession`.
+* **System-proxy mode, IPv6 data path and reconnect cycles** are not yet covered by tests.
+* The **systemd-resolved** DNS backend (the `resolv.conf` backend is the one that is tested).
+* Geo-data **download** (fetching from a source with SHA-256 from a signed
+  manifest). Atomic install/rollback/repair exist; the network fetch does not.
 * Installers, bundling, code signing and artifact provenance.
+* Localization: the `header.*` labels (83 keys) exist in English only and currently fall
+  back to English in `ru`/`zh-Hans`; `build/check-localization.py --strict-headers` is the
+  flag that will tighten this once they are translated.
 
 **Known inaccuracies in the current tree** (details in
 [`docs/architecture/overview.md`](docs/architecture/overview.md#known-gaps-and-inaccuracies-in-the-current-tree)):
 
-* **9 of 696 `MyVpn.Core.Tests` cases fail**, so `dotnet test` is red. They are
-  genuine test/implementation disagreements (see the build section above).
-* `tests/MyVpn.Integration.Tests` contains no tests, so its CI leg passes
-  vacuously.
 * Some `.csproj` comments describe planned behaviour in the present tense.
 * `MyVpn.UI.csproj` still references `Assets/**`, which does not exist yet
   (`app.manifest` and `Localization/locales/*.json` now do).
-* `GeoDataStatus` still calls a relative asset path "the definitive signature of
-  the issue #9765 defect", which contradicts the verified root cause — the value
-  was absolute and was never delivered to the elevated process.
-* `MuxSettings.XudpProxyUdp443` is a `bool`, but Xray's field is the tri-state
-  `"reject" | "allow" | "skip"`.
 * `TunSettings.AutoRoute` / `StrictRoute` / `RouteOnly` are MyVpn policy, not
-  Xray JSON fields, and must never be emitted as such.
+  Xray JSON fields. The builder maps `AutoRoute` onto the routing rules and `RouteOnly`
+  onto `sniffing.routeOnly` (a real Xray field), and never emits them as TUN-inbound keys.
+* `MyVpn.Core.Tests` references `src/MyVpn.UI`, so the UI is tested from the Core test
+  project rather than one of its own.
+* The UI has never been rendered in this environment — there is no display and no Xvfb — so
+  the views are compile- and binding-verified only.
 
 ## Security model
 
@@ -314,7 +317,16 @@ Verified by inspecting the source tree and building it.
 
 ## Licensing
 
-MyVpn is licensed **GPL-3.0-or-later** ([`LICENSE`](LICENSE)).
+MyVpn is licensed **GPL-3.0-only** ([`LICENSE`](LICENSE)).
+
+The `only` is deliberate and load-bearing, for two independent reasons. The `LICENSE`
+file is the bare GNU GPL version 3 text with no version-election statement, so no file in
+this repository actually grants the "or any later version" option — declaring
+`-or-later` would claim a permission that does not exist. And this project may incorporate
+code **adapted from v2rayN**, which is itself GPL-3.0-**only**, so the additional
+permission could not be extended over those parts in any case. Details:
+[ADR-0009](docs/adr/ADR-0009-licensing-and-provenance.md) and
+[`docs/provenance.md`](docs/provenance.md).
 
 * **Xray-core** is **MPL-2.0**. It is used as a separate unmodified executable, so
   it imposes no copyleft on MyVpn's source; when bundled, the upstream `LICENSE`
@@ -335,7 +347,7 @@ Full detail: [`NOTICE`](NOTICE) and
 
 ## Documentation
 
-* [`docs/adr/`](docs/adr/) — Architecture Decision Records 0001–0011, each citing
+* [`docs/adr/`](docs/adr/) — Architecture Decision Records 0001–0012, each citing
   the research and the underlying primary sources.
 * [`docs/architecture/overview.md`](docs/architecture/overview.md) — layers, the
   dependency rule, module inventory, connect/disconnect sequence, diagnostics
@@ -344,7 +356,8 @@ Full detail: [`NOTICE`](NOTICE) and
   (v2rayN architecture, issue #9765 geo data, the Xray TUN inbound, the NAT/UDP
   matrix, Happ headers, and Windows/Linux/macOS networking).
 * [`NOTICE`](NOTICE), [`LICENSE`](LICENSE).
-* [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — build, unit and
-  integration tests, static analysis, CodeQL, dependency and secret scanning,
-  licence inventory, the clean-room provenance guard, packaging and conditional
-  signing.
+* [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — a five-runner build/test
+  matrix (`windows-x64`, `linux-x64`, `linux-arm64`, `macos-intel`,
+  `macos-apple-silicon`), full-solution build, static analysis, CodeQL, dependency and
+  secret scanning, licence inventory, the localization and clean-room provenance guards,
+  packaging, and conditional signing.

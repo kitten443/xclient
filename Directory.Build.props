@@ -37,11 +37,14 @@
     <Product>MyVpn</Product>
     <Copyright>Copyright (C) 2025 MyVpn Contributors</Copyright>
     <!--
-      GPL-3.0-only, not "or later". v2rayN is GPL-3.0-ONLY (its LICENSE carries no
-      "or later" clause, verified against the primary source), and this project may
-      incorporate adapted code from it. Our own files keep their "or later" grant, but the
-      combined distribution as a whole can only be offered under GPL-3.0, because the
-      additional permission cannot be granted over someone else's GPL-3.0-only code.
+      GPL-3.0-only, not "or later". Two independent reasons, and either alone is sufficient:
+      v2rayN is GPL-3.0-ONLY (its LICENSE carries no "or later" clause, verified against the
+      primary source) and this project may incorporate adapted code from it, so the additional
+      permission could not be granted over those parts even if we wanted to; and the top-level
+      LICENSE in this repository is the bare GPLv3 text with no version-election statement, so
+      no file here actually grants "or any later version". Declaring -or-later would therefore
+      claim a permission the repository does not grant. See NOTICE §3 and
+      docs/provenance.md.
     -->
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>

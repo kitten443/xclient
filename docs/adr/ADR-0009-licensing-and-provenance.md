@@ -21,18 +21,21 @@ common assumption.
 
 * `/LICENSE` is the verbatim GNU GPL version 3 text with **no version-election
   statement** anywhere in the repository.
-* `Directory.Build.props` declares the deprecated SPDX expression `GPL-3.0`,
-  which is the alias of `GPL-3.0-only`, not `GPL-3.0-or-later`.
+* v2rayN's `Directory.Build.props` declares the deprecated SPDX expression
+  `GPL-3.0`, which is the alias of `GPL-3.0-only`, not `GPL-3.0-or-later`.
 * GitHub repository metadata reports `spdx_id: "GPL-3.0"`.
 * No `.cs` file carries an SPDX or copyright header; `README` has no licence
   section; there is no `NOTICE`/additional-terms file.
 
 The consequence is that copying *anything* from v2rayN — source, the embedded
 `Sample/*` JSON config templates, `.resx` strings, shell scripts, or icons —
-would make MyVpn a derivative work of a GPL-3.0-only work. MyVpn's own
-`GPL-3.0-or-later` grant cannot add the "or later" option on top of a
-GPL-3.0-only component for the copied portions. `NOTICE` §3 already states the
-policy: prior art is *studied*, not copied.
+would make MyVpn a derivative work of a GPL-3.0-only work, and the copied
+portions stay GPL-3.0-only. MyVpn does not need to rely on any "or later"
+permission to do this, because it grants none: our own `LICENSE` is also the bare
+GPLv3 text with no version-election statement, and `PackageLicenseExpression` is
+`GPL-3.0-only`. That alignment is deliberate — see `docs/provenance.md`. Prior art
+that is only *studied* is not a licensing event at all; `NOTICE` §3 states the
+policy and the register in `docs/provenance.md` records every adapted file.
 
 ### Xray-core is MPL-2.0 and is consumed as a separate process
 
@@ -214,9 +217,10 @@ redistribution checklist this implements.
   the guard deliberately, not to delete it.
 * Not bundling geo data means a first-run download and a first-run failure mode
   that bundling would avoid.
-* If the project ever wants to reuse v2rayN material, the "or later" grant cannot
-  cover it and the copied files must be marked `GPL-3.0-only` with the original
-  copyright line. That is deliberately made unattractive.
+* If the project ever wants to reuse v2rayN material, no "or later" grant exists to
+  cover it — neither upstream's nor ours — so the copied files must be marked
+  `GPL-3.0-only` with the original copyright line. That is deliberately
+  unattractive.
 * Carrying a native third-party DLL means tracking its version and hash forever.
 
 ## Alternatives considered
@@ -226,9 +230,10 @@ redistribution checklist this implements.
   template copied verbatim imports GPL-3.0-only material into an assembly. It
   would also freeze v2rayN's own schema mistakes — it emits `"MTU"` rather than
   the documented `"mtu"`.
-* **Rely on MyVpn's own GPL-3.0-or-later grant to cover copied v2rayN code.**
-  Rejected: "or later" cannot be granted over a GPL-3.0-only component. At best
-  the combined work is GPLv3 with the copied files pinned to `only`.
+* **Rely on an "or later" grant to cover copied v2rayN code.** Rejected, and now
+  moot: "or later" cannot be granted over a GPL-3.0-only component, and this
+  repository grants no such permission for its own files either. The combined
+  work is GPLv3 with every part pinned to `only`.
 * **Ship "inspired by v2rayN" in `NOTICE` and treat that as sufficient.** The
   research is explicit that this "is **not** a substitute once code is copied."
   Hence automated enforcement.
@@ -273,7 +278,7 @@ redistribution checklist this implements.
   formalises (§1 Xray, §2 geo data, §3 studied reference projects, §4 NuGet
   dependencies and the `license-scan` job, §5 the redistribution checklist).
 * `LICENSE` — GPL-3.0.
-* `Directory.Build.props` — `PackageLicenseExpression` `GPL-3.0-or-later`.
+* `Directory.Build.props` — `PackageLicenseExpression` `GPL-3.0-only`.
 * `.github/workflows/ci.yml` — the `provenance-guard`, `license-scan` and
   `packaging` (provenance manifest) jobs.
 * Upstream: <https://github.com/2dust/v2rayN> (LICENSE, `Directory.Build.props`);
