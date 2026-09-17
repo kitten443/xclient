@@ -116,5 +116,15 @@ public interface IDnsConfigurator
     /// <summary>Restores the configuration recorded in the plan.</summary>
     Task<Result> RestoreAsync(DnsPlan plan, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Removes every DNS override MyVpn owns, restoring the system's own resolver.
+    /// </summary>
+    /// <remarks>
+    /// Used by emergency cleanup, where the original plan is not available. Losing a stale
+    /// override matters more than preserving it: a resolver pointing at a tunnel that no longer
+    /// exists makes the machine appear to have no internet at all.
+    /// </remarks>
+    Task<Result> RemoveAllOwnedAsync(CancellationToken cancellationToken);
+
     Task<DnsState> InspectAsync(CancellationToken cancellationToken);
 }

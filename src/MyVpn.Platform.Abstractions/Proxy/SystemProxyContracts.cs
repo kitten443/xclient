@@ -111,5 +111,15 @@ public interface ISystemProxy
 
     Task<Result> RestoreAsync(SystemProxySnapshot snapshot, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Disables the system proxy outright.
+    /// </summary>
+    /// <remarks>
+    /// Emergency cleanup cannot restore a snapshot it never captured, and a proxy pointing at a
+    /// listener that no longer exists is a reboot-surviving blackhole. Turning it off is the only
+    /// action that reliably returns the machine to a working state.
+    /// </remarks>
+    Task<Result> ResetAsync(CancellationToken cancellationToken);
+
     Task<SystemProxyState> InspectAsync(CancellationToken cancellationToken);
 }

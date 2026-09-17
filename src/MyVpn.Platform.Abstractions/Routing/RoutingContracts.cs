@@ -122,6 +122,17 @@ public interface IRouteManager
 
     Task<Result> RemoveAsync(RoutePlan plan, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Removes every route MyVpn owns, without needing the plan that created it.
+    /// </summary>
+    /// <remarks>
+    /// Emergency cleanup cannot rely on reconstructing the original plan: after a crash the
+    /// settings may have changed, and the whole point is to recover from a state the application
+    /// no longer has a coherent model of. Ownership is therefore determined from the routes
+    /// themselves.
+    /// </remarks>
+    Task<Result> RemoveAllOwnedAsync(CancellationToken cancellationToken);
+
     Task<RouteState> InspectAsync(RoutePlan? expected, CancellationToken cancellationToken);
 
     /// <summary>Best-effort discovery of the current default interface and gateway.</summary>

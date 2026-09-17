@@ -175,6 +175,23 @@ public sealed class LinuxSystemProxy : ISystemProxy
         return Result.Ok();
     }
 
+    public async Task<Result> ResetAsync(CancellationToken cancellationToken)
+    {
+        // Only the mode is changed. The previously configured host and port are left untouched so
+        // that a user who re-enables manual proxy mode finds their own values again rather than
+        // whatever MyVpn happened to write.
+        var written = await SetAsync(ProxySchema, "mode", "none", cancellationToken).ConfigureAwait(false);
+        if (written.IsFailure)
+        {
+            return written;
+        }
+
+        var autoconfig = await SetAsync(ProxySchema, "autoconfig-url", string.Empty, cancellationToken)
+            .ConfigureAwait(false);
+
+        return autoconfig;
+    }
+
     public async Task<SystemProxyState> InspectAsync(CancellationToken cancellationToken)
     {
         var mode = await GetAsync(ProxySchema, "mode", cancellationToken).ConfigureAwait(false);

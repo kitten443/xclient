@@ -94,6 +94,7 @@ Rules:
 | [0009](ADR-0009-licensing-and-provenance.md) | Licensing and provenance | Accepted | v2rayN is GPL-3.0-only ⇒ clean-room; Xray MPL-2.0 consumed as a separate process; geo data from `v2fly`; only public Happ documentation. |
 | [0010](ADR-0010-ui-localization-and-theming.md) | UI localization and theming | Accepted | DI-constructed view models, runtime culture switching, `ErrorCodes`-to-message-key mapping, theme swap by resource dictionary. |
 | [0011](ADR-0011-transport-and-nat-strategy.md) | Transport and NAT strategy | Accepted | Cone is server-side and env-toggled; mux/XUDP coherence asserted; bounded fallback chain; local NAT type is never authoritative. |
+| [0012](ADR-0012-connect-sequencing-and-verification.md) | Connect sequencing and verification | Accepted | Arm the Kill Switch before starting the core; verify with a real request; a failed first connect returns to `Disconnected`; restore the proxy before tearing down the listener. |
 
 ## Alternatives considered
 

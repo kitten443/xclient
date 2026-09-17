@@ -199,22 +199,47 @@ Verified by inspecting the source tree and building it.
   `MainWindowViewModel` and a JSON localization service with `en`/`ru`/`zh-Hans`
   locales, 196 keys each) and `MyVpn.Service` (privilege and capability
   pre-flight).
-* A test suite: 695 cases in `MyVpn.Core.Tests`, 66 in
-  `MyVpn.Infrastructure.Tests`, 15 in `MyVpn.Platform.Tests`.
+* `MyVpn.Application`: the connect path. `VpnSession` sequences validate → locate →
+  resolve → geo → build → stage → **arm the Kill Switch → start the core → point the
+  desktop at the tunnel** → verify with a real request, and tears down in reverse. A
+  failed first connect returns to `Disconnected` rather than `Faulted`, and refuses to
+  connect without the Kill Switch when the user asked for one and the server address
+  cannot be pinned. Rationale and rejected alternatives: `ADR-0012`.
+* `MyVpn.Infrastructure` adapters: `AppPaths`, `AtomicConfigFileStore`,
+  `CoreLocatorAdapter`, `CoreSupervisorAdapter`, `GeoDataProviderAdapter`,
+  `DnsServerEndpointResolver`, `HttpProxyConnectionVerifier` (the check that
+  distinguishes a live process from a working tunnel) and `SubscriptionFetcher`.
+* Working `myvpn connect --subscription … --index N [--mode proxy|tun] [--core PATH]
+  [--kill-switch off|on-demand|always-on]`. Verified against a live subscription:
+  exit address distinct from the host's own, across XHttp+TLS, XHttp+REALITY and
+  gRPC+REALITY profiles.
+* `MyVpn.Platform.Linux` executors: `ICommandRunner` (argv only, never a shell),
+  `NftablesKillSwitch` (verified by applying and reading back inside a real kernel
+  network namespace) and `LinuxSystemProxy` (GSettings, including the `none`/`manual`/
+  `auto` mode triad so a corporate PAC configuration is restored faithfully).
+* A test suite: 782 cases in `MyVpn.Core.Tests`, 66 in
+  `MyVpn.Infrastructure.Tests`, 34 in `MyVpn.Platform.Tests`, 5 in
+  `MyVpn.Integration.Tests` — 887 total.
 
 **Planned:**
 
 * Geo-data **download** (fetching from a source with SHA-256 from a signed
   manifest). Atomic install/rollback/repair exist; the network fetch does not.
-* Platform **executors** (as opposed to contracts/renderers): kill switch, route
-  management, DNS configuration, process routing and system proxy for Windows,
-  Linux and macOS; only the Linux nftables renderer exists so far.
+* Linux **route** and **DNS** executors, and `INetworkStateManager` (the "Restore
+  network" button). In progress.
+* **TUN mode end to end.** The config builder emits it and the executors are being
+  written; it has not yet been exercised against a real server.
+* **Windows and macOS executors** — deliberately not started. They cannot be compiled
+  or run on the development platform, so they would be unverifiable code. Write-only
+  platform layers should be added when a runner for those systems is available.
+* **Process routing** on any platform (see ADR-0007 for the honest capability matrix).
 * The authenticated IPC transport in `MyVpn.Ipc` and the real privileged
-  service implementation behind it.
-* The `MyVpn.Application` use cases (connect/disconnect/import/diagnostics
-  orchestration) wiring the Core services together.
+  service implementation behind it. Until it exists, the Kill Switch reports
+  "present but needs privileges" rather than pretending to be armed.
 * The real UI: DI composition, remaining view models/views, theme service,
-  settings persistence and OS-keystore secret storage.
+  settings persistence and OS-keystore secret storage. The main screen exists but its
+  Connect button still drives the state machine directly instead of `VpnSession`.
+* Geo-data **download**.
 * Integration tests (`tests/MyVpn.Integration.Tests` is empty).
 * Installers, bundling, code signing and artifact provenance.
 
