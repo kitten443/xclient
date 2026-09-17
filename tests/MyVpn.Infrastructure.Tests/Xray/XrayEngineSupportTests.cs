@@ -66,11 +66,22 @@ public sealed class XrayBinaryLocatorTests
     [Fact]
     public void PrefersTheUserSelectedCoreOverTheBundledOne()
     {
+        // The locator does not use the user's string as a file path. It converts it with
+        // Path.GetFullPath, takes the DIRECTORY, and joins the platform binary name onto that. The
+        // distinction is invisible on Linux and load-bearing on Windows, where GetFullPath gives a
+        // rooted path its drive letter: a fixture keyed on the raw "\custom\xray" never matches, the
+        // lookup falls through to the bundled directory, and the test fails while the locator is
+        // behaving exactly as documented. Building the expectation the same way the locator does
+        // keeps this test about precedence rather than about separator and drive-letter trivia.
         var selected = Bin("/custom");
-        var result = Locate(selected, "/app", new[] { Bin(Dir("/app", "xray")), selected });
+        var lookedFor = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(selected))!,
+            XrayBinaryLocator.BinaryName(isWindows: false));
+
+        var result = Locate(selected, "/app", new[] { Bin(Dir("/app", "xray")), lookedFor });
 
         result.IsSuccess.ShouldBeTrue();
-        result.Path.ShouldBe(Resolved(selected));
+        result.Path.ShouldBe(Resolved(lookedFor));
     }
 
     [Fact]
@@ -96,6 +107,43 @@ public sealed class XrayBinaryLocatorTests
         result.IsSuccess.ShouldBeFalse();
         result.Error!.Code.ShouldBe(MyVpn.Core.Results.ErrorCodes.XrayBinaryNotExecutable);
         result.Error.RemediationKey.ShouldBe("xray.select_binary");
+    }
+
+    [Fact]
+    public void UsesTheExactFileTheUserSelectedEvenWhenItIsNotNamedLikeTheCore()
+    {
+        // The whole point of an explicit selection is that the user knows where their core is. A
+        // versioned or renamed binary is the normal case for anyone who unpacks releases side by
+        // side, and the locator used to reduce the path to its directory and then look for the
+        // conventional name -- so it reported "no core binary at the selected path" for a path the
+        // user could see in their file manager. Asserted with a name no convention would produce.
+        var renamed = Bin(Dir("/custom"), isWindows: false) + "-26.9.9";
+        var result = Locate(renamed, "/app", new[] { renamed, Bin(Dir("/app", "xray")) });
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Path.ShouldBe(Resolved(renamed));
+    }
+
+    [Fact]
+    public void FallsBackToTheConventionWhenTheSelectedFileIsAbsent()
+    {
+        // Passing a directory, or a path that has since moved, must keep working: the selection is
+        // still the strongest hint about where to look, so its directory is searched first.
+        var result = Locate(Bin("/custom"), "/app", new[] { Bin(Dir("/app", "xray")) });
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Path.ShouldBe(Resolved(Bin(Dir("/app", "xray"))));
+    }
+
+    [Fact]
+    public void ReportsAnExplicitlySelectedCoreThatIsNotExecutable()
+    {
+        var stripped = Bin(Dir("/custom"), isWindows: false) + "-26.9.9";
+        var result = Locate(stripped, "/app", new[] { stripped }, nonExecutable: new[] { stripped });
+
+        result.IsSuccess.ShouldBeFalse();
+        result.Error!.Code.ShouldBe(MyVpn.Core.Results.ErrorCodes.XrayBinaryNotExecutable);
+        result.Error.Arguments["path"].ShouldBe(stripped);
     }
 
     [Fact]

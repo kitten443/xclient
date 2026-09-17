@@ -139,6 +139,37 @@ public static class XrayBinaryLocator
         var searched = new List<string>();
         var notExecutable = new List<string>();
 
+        // An explicit selection is honoured as a FILE before anything else. The convention below --
+        // take the directory, join the platform binary name -- exists to FIND a core, and applying it
+        // to a path the user typed silently discards the file they chose: `--core /opt/xray/xray-26.9.9`
+        // would look for /opt/xray/xray and report "no core binary at the selected path" while the
+        // binary sat right there, next to it. That is the least debuggable failure a "point me at your
+        // core" flag can produce, because the path in the message is the one the user just confirmed
+        // exists. Falling through to the convention when the exact path is absent, or present but not
+        // executable, keeps every existing behaviour intact.
+        if (!string.IsNullOrWhiteSpace(userSelectedPath))
+        {
+            var selected = Path.GetFullPath(userSelectedPath);
+            searched.Add(selected);
+
+            if (fileExists(selected))
+            {
+                if (isExecutable is null || isExecutable(selected))
+                {
+                    return Result<XrayBinary>.Ok(new XrayBinary
+                    {
+                        AbsolutePath = selected,
+                        Source = XrayBinarySource.UserSelected,
+                        SearchedPaths = searched,
+                    });
+                }
+
+                // Present but unusable. Recorded rather than returned so that the diagnostics below
+                // still name it if nothing else in the search order works out.
+                notExecutable.Add(selected);
+            }
+        }
+
         foreach (var (directory, source) in BuildSearchOrder(
                      userSelectedPath, applicationBaseDirectory, packageManagerDirectories, isWindows))
         {
