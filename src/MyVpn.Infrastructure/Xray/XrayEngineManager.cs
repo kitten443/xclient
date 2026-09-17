@@ -277,7 +277,14 @@ public sealed class XrayEngineManager : IXrayEngine, IDisposable
                 $"Could not run the configuration pre-flight: {result.FailureDetail}"));
         }
 
-        var interpreted = XrayTestRunInterpreter.Interpret(result.ExitCode, result.StandardError, _version);
+        // Xray writes its config diagnosis to whichever stream is convenient, so fall back to
+        // stdout when stderr is empty. Without this the user sees "config rejected" with no reason,
+        // which is precisely the opaque failure this pre-flight exists to prevent.
+        var diagnosticText = string.IsNullOrWhiteSpace(result.StandardError)
+            ? result.StandardOutput
+            : result.StandardError;
+
+        var interpreted = XrayTestRunInterpreter.Interpret(result.ExitCode, diagnosticText, _version);
 
         if (interpreted.IsValid)
         {

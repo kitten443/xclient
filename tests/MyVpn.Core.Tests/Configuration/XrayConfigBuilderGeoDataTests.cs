@@ -143,7 +143,11 @@ public sealed class XrayConfigBuilderGeoDataTests
             Routing = new RoutingSettings { BypassLan = true },
         };
 
-        var result = XrayConfigTestFactory.BuildOk(XrayConfigTestFactory.Request(settings: settings));
+        // geoip must be available for the alias to be usable at all; with the asset missing the
+        // builder emits explicit private ranges instead, which is covered separately.
+        var result = XrayConfigTestFactory.BuildOk(XrayConfigTestFactory.Request(
+            settings: settings,
+            geo: new GeoRuleAvailability(GeoIpAvailable: true, GeoSiteAvailable: true)));
 
         var rule = XrayConfigTestFactory.RoutingRule(
             XrayConfigTestFactory.Root(result), "myvpn-lan-direct");
@@ -165,10 +169,47 @@ public sealed class XrayConfigBuilderGeoDataTests
             settings: settings,
             geo: GeoRuleAvailability.None));
 
-        XrayConfigTestFactory.RoutingRule(XrayConfigTestFactory.Root(result), "myvpn-lan-direct")
-            .ShouldNotBeNull();
+        var rule = XrayConfigTestFactory.RoutingRule(XrayConfigTestFactory.Root(result), "myvpn-lan-direct");
+        rule.ShouldNotBeNull();
 
-        // geoip:private is served from Xray's built-in table, so the missing asset is not warned about.
+        // The original version of this test asserted that "geoip:private is served from Xray's
+        // built-in table, so the missing asset is not a problem". Running the real core disproved
+        // that outright:
+        //
+        //   infra/conf: invalid field rule > common/geodata: illegal ip rule: geoip:private
+        //     > common/geodata: failed to open geoip.dat
+        //     > stat <dir>/geoip.dat: no such file or directory
+        //
+        // Xray rejects the WHOLE configuration, so the LAN rule must not depend on the asset.
+        rule["ip"]!.AsArray().Select(node => node!.GetValue<string>())
+            .ShouldNotContain(value => value.StartsWith("geoip:", StringComparison.Ordinal));
+
+        // Graceful degradation keeps the feature: explicit private ranges replace the alias.
+        var ranges = rule["ip"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+        ranges.ShouldContain("192.168.0.0/16");
+        ranges.ShouldContain("10.0.0.0/8");
+        ranges.ShouldContain("fc00::/7");
+
+        // And the user is told that geo-dependent policy is reduced, so repair is discoverable.
+        result.Warnings.ShouldContain(w => w.Code == ErrorCodes.GeoAssetMissing);
+    }
+
+    [Fact]
+    public void Lan_bypass_uses_the_geoip_private_alias_when_the_asset_is_available()
+    {
+        var settings = new AppSettings
+        {
+            Routing = new RoutingSettings { BypassLan = true },
+        };
+
+        var result = XrayConfigTestFactory.BuildOk(XrayConfigTestFactory.Request(
+            settings: settings,
+            geo: new GeoRuleAvailability(GeoIpAvailable: true, GeoSiteAvailable: true)));
+
+        XrayConfigTestFactory.RoutingRule(XrayConfigTestFactory.Root(result), "myvpn-lan-direct")["ip"]!
+            .AsArray().Select(node => node!.GetValue<string>())
+            .ShouldBe(new[] { "geoip:private" });
+
         result.Warnings.ShouldNotContain(w => w.Code == ErrorCodes.GeoAssetMissing);
     }
 

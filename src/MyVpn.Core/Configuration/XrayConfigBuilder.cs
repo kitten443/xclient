@@ -835,14 +835,48 @@ public static class XrayConfigBuilder
         }
 
         // 3. Local network stays direct, so printers, NAS and mDNS keep working.
+        //
+        // This rule is the one place where the geo-data gate was originally missed, and the
+        // consequence was severe: `geoip:private` needs geoip.dat, so a missing or corrupt asset
+        // made Xray reject the ENTIRE configuration rather than just dropping a rule. Found by
+        // running the real core with an empty geo directory.
+        //
+        // The fix keeps the feature working without geo data instead of merely omitting the rule:
+        // explicit RFC1918/ULA/link-local ranges cover the same ground and depend on nothing.
         if (routing.BypassLan)
         {
-            rules.Add(new XrayRoutingRule
+            if (request.GeoAvailability.GeoIpAvailable)
             {
-                RuleTag = "myvpn-lan-direct",
-                Ip = new[] { "geoip:private" },
-                OutboundTag = DirectTag,
-            });
+                rules.Add(new XrayRoutingRule
+                {
+                    RuleTag = "myvpn-lan-direct",
+                    Ip = new[] { "geoip:private" },
+                    OutboundTag = DirectTag,
+                });
+            }
+            else
+            {
+                rules.Add(new XrayRoutingRule
+                {
+                    RuleTag = "myvpn-lan-direct",
+                    Ip = new[]
+                    {
+                        "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                        "169.254.0.0/16", "100.64.0.0/10",
+                        "::1/128", "fc00::/7", "fe80::/10",
+                    },
+                    OutboundTag = DirectTag,
+                });
+
+                warnings.Add(new MyVpnError(
+                    ErrorCodes.GeoAssetMissing,
+                    "error.config.geo_rule_omitted",
+                    ErrorSeverity.Warning,
+                    "geoip.dat is unavailable, so the LAN bypass rule uses explicit private ranges "
+                    + "instead of geoip:private. Behaviour is equivalent.",
+                    "geodata.repair")
+                    .WithArg("pattern", "geoip:private"));
+            }
         }
 
         // 4. Ad/tracker blocking by geosite. Only emitted when geosite is actually usable.

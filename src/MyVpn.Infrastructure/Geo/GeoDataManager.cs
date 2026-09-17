@@ -402,6 +402,81 @@ public sealed class GeoDataManager
     }
 
     /// <summary>
+    /// Ensures the writable working copy actually contains usable assets, seeding it from the
+    /// read-only installation copy when necessary.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This closes the remaining hole in the issue #9765 class of defect, and it was found by
+    /// reproducing that exact failure against a real core:
+    /// </para>
+    /// <code>
+    /// common/geodata: illegal ip rule: geoip:private
+    ///   &gt; failed to open geoip.dat
+    ///   &gt; stat ~/.local/share/myvpn/geodata/geoip.dat: no such file or directory
+    /// </code>
+    /// <para>
+    /// The manager had resolved the assets from the seed directory and reported them usable, while
+    /// <see cref="AssetDirectory"/> — the value exported as <c>XRAY_LOCATION_ASSET</c> — still
+    /// pointed at an empty working copy. The assets were valid somewhere, and the core was told to
+    /// look somewhere else. Reporting an asset as usable is only meaningful if the core will read
+    /// the same file, so the working copy is populated rather than merely fallen back to.
+    /// </para>
+    /// </remarks>
+    public async Task<GeoDataStatus> EnsureWorkingCopyAsync(CancellationToken cancellationToken)
+    {
+        var status = await InspectAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var kind in new[] { GeoAssetKind.GeoIp, GeoAssetKind.GeoSite })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var target = Path.Combine(AssetDirectory, kind.FileName());
+            if (File.Exists(target))
+            {
+                continue;
+            }
+
+            var source = FindFallback(kind);
+            if (source is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await using var stream = File.OpenRead(source);
+
+                var installed = await InstallAsync(
+                    kind, stream, null, "seed", source, cancellationToken).ConfigureAwait(false);
+
+                if (installed.IsSuccess)
+                {
+                    _logger.LogInformation(
+                        "Seeded {Kind} into the working copy from {Source}.",
+                        kind,
+                        source);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Could not seed {Kind} from {Source}: {Error}",
+                        kind,
+                        source,
+                        installed.Error);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "Could not read the seed copy of {Kind}.", kind);
+            }
+        }
+
+        // Re-inspect so callers see the state the core will actually encounter.
+        return await InspectAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Best-effort repair: re-seeds the working copy from the installation's read-only seed,
     /// falls back to the backup generation, and reports whatever remains broken.
     /// </summary>

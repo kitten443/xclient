@@ -40,6 +40,7 @@ internal static class Program
                 "version" or "--version" or "-v" => PrintVersion(),
                 "geo" => RunGeo(args, loggerFactory),
                 "diagnose" => RunDiagnose(args, loggerFactory),
+                "connect" => ConnectCommand.RunAsync(args, loggerFactory).GetAwaiter().GetResult(),
                 _ => Unknown(args[0]),
             };
         }
@@ -65,6 +66,12 @@ internal static class Program
         Console.WriteLine("      --core P      Path to the Xray core binary.");
         Console.WriteLine("      --config P    Path to a generated configuration file.");
         Console.WriteLine("      --online      Also run checks that need the network.");
+        Console.WriteLine("  myvpn connect [options]       Connect through a subscription.");
+        Console.WriteLine("      --subscription URL   Subscription URL (required).");
+        Console.WriteLine("      --index N            Which profile to use (default 0).");
+        Console.WriteLine("      --mode proxy|tun     Tunnel mode (default proxy).");
+        Console.WriteLine("      --hold SECONDS       Stay connected before disconnecting.");
+        Console.WriteLine("      --core PATH          Path to the Xray core binary.");
         Console.WriteLine("  myvpn help                    Show this help.");
         Console.WriteLine();
         Console.WriteLine("Geo data must be reachable through an ABSOLUTE path; see ADR-0003.");

@@ -32,8 +32,10 @@ public sealed class XrayConfigBuilderPlatformTests
         var tun = XrayConfigTestFactory.Inbound(XrayConfigTestFactory.Root(result), "tun");
         tun["settings"]!["name"]!.GetValue<string>().ShouldBe("utun0");
 
-        var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.MessageKey.ShouldBe("error.tun.macos_name_invalid");
+        // Located by key rather than by count: the default fixture reports no geoip asset, which
+        // legitimately adds its own warning, and asserting "exactly one warning" would then be
+        // testing the fixture rather than the interface-name behaviour.
+        var warning = result.Warnings.Single(w => w.MessageKey == "error.tun.macos_name_invalid");
         warning.Severity.ShouldBe(MyVpn.Core.Results.ErrorSeverity.Warning);
     }
 
@@ -52,7 +54,9 @@ public sealed class XrayConfigBuilderPlatformTests
         XrayConfigTestFactory.Inbound(XrayConfigTestFactory.Root(result), "tun")["settings"]!["name"]!
             .GetValue<string>().ShouldBe("utun7");
 
-        result.Warnings.ShouldBeEmpty();
+        // Scoped to the interface-name question this test is about: the default fixture reports
+        // no geoip asset, which legitimately also produces a geo-degradation warning.
+        result.Warnings.ShouldNotContain(w => w.MessageKey == "error.tun.macos_name_invalid");
     }
 
     [Fact]

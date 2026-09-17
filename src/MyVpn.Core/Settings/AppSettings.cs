@@ -604,8 +604,18 @@ public sealed record MuxSettings
 /// <summary>System proxy behaviour used in <see cref="TunnelMode.SystemProxy"/>.</summary>
 public sealed record ProxySettings
 {
-    /// <summary>Local inbound port for the SOCKS/HTTP listener.</summary>
+    /// <summary>Local inbound port for the SOCKS listener.</summary>
     public int ListenPort { get; init; } = 10808;
+
+    /// <summary>
+    /// Port of the local HTTP inbound.
+    /// </summary>
+    /// <remarks>
+    /// Derived rather than configured separately so that the config builder and the connection
+    /// verifier cannot disagree about where the HTTP proxy listens. If they could, verification
+    /// would probe a closed port and report a working tunnel as broken.
+    /// </remarks>
+    public int EffectiveHttpPort => ListenPort + 1;
 
     /// <summary>Expose SOCKS as well as HTTP.</summary>
     public bool EnableSocks { get; init; } = true;

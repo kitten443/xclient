@@ -8,7 +8,9 @@ using MyVpn.UI.Views;
 
 namespace MyVpn.UI;
 
-public partial class App : Application
+// Fully qualified: the sibling namespace `MyVpn.Application` would otherwise shadow
+// `Avalonia.Application` when the bare identifier is resolved inside `MyVpn.UI`.
+public partial class App : Avalonia.Application
 {
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 

@@ -20,6 +20,13 @@
 
   <ItemGroup>
     <ProjectReference Include="../MyVpn.Core/MyVpn.Core.csproj" />
+
+    <!--
+      The platform *abstractions* are contracts, not implementations, so depending on them keeps
+      the dependency rule intact: the application layer can express "arm the kill switch" without
+      knowing whether that means nftables, WFP or PF.
+    -->
+    <ProjectReference Include="../MyVpn.Platform.Abstractions/MyVpn.Platform.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>
