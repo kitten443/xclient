@@ -221,6 +221,19 @@ public static class NftablesProcessRoutingRenderer
         ProcessRoutingRenderContext? context = null) => Render(plan, context).NftablesText;
 
     /// <summary>
+    /// Finalises a rendered ruleset.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="StringBuilder.AppendLine()"/> emits <see cref="Environment.NewLine"/>, which is
+    /// <c>\r\n</c> on Windows. A ruleset is a file for nft — a Linux tool — not text for the host
+    /// that happened to render it: its separator is <c>\n</c> on every operating system this code
+    /// is compiled or unit-tested on, so the host's convention must not leak into the file. On
+    /// Linux the replace is a no-op, which is what keeps the Linux assertions byte-identical.
+    /// </remarks>
+    private static string Finish(StringBuilder builder) =>
+        builder.Replace(Environment.NewLine, "\n").ToString();
+
+    /// <summary>
     /// Renders the idempotent teardown ruleset: create-if-missing, then delete.
     /// </summary>
     /// <remarks>
@@ -235,7 +248,7 @@ public static class NftablesProcessRoutingRenderer
         builder.AppendLine("# Safe to run when nothing is installed: the bare table line creates it if missing.");
         builder.AppendLine(CultureInfo.InvariantCulture, $"table inet {TableName}");
         builder.AppendLine(CultureInfo.InvariantCulture, $"delete table inet {TableName}");
-        return builder.ToString();
+        return Finish(builder);
     }
 
     /// <summary>Renders a read-only query used by verification.</summary>
@@ -287,7 +300,7 @@ public static class NftablesProcessRoutingRenderer
         AppendClearMarkChain(builder, context, needsBypass);
 
         builder.AppendLine("}");
-        return builder.ToString();
+        return Finish(builder);
     }
 
     /// <summary>

@@ -1469,10 +1469,15 @@ public sealed class MacDnsConfiguratorPureTests
     [FactOnNonMacOS]
     public void ResolverFilePathsCannotEscapeTheResolverDirectory()
     {
-        MacDnsConfigurator.ResolverFilePath("corp.example").ShouldBe("/etc/resolver/corp.example");
+        // The expectation is built with Path.Combine because that is how the executor builds the
+        // path: the class only ever runs on macOS, where the separator is '/', so a literal
+        // "/etc/resolver/corp.example" is correct there but cannot match on a Windows test host.
+        MacDnsConfigurator.ResolverFilePath("corp.example")
+            .ShouldBe(Path.Combine(MacDnsConfigurator.ResolverDirectory, "corp.example"));
 
         // A wildcard domain is expressed as the bare suffix: resolver(5) names files by domain.
-        MacDnsConfigurator.ResolverFilePath("*.corp.example").ShouldBe("/etc/resolver/corp.example");
+        MacDnsConfigurator.ResolverFilePath("*.corp.example")
+            .ShouldBe(Path.Combine(MacDnsConfigurator.ResolverDirectory, "corp.example"));
 
         // Path traversal is refused outright rather than sanitised.
         MacDnsConfigurator.IsSafeResolverDomain("../../etc/passwd").ShouldBeFalse();

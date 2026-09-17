@@ -128,6 +128,18 @@ public sealed class CgroupV2Manager
     /// <summary>Slice holding processes that must use the tunnel.</summary>
     public const string DefaultSliceName = "myvpn.slice";
 
+    /// <summary>
+    /// Joins paths inside the cgroup2 virtual filesystem.
+    /// </summary>
+    /// <remarks>
+    /// These are not host paths. Every access goes through the file-system abstraction whose keys are
+    /// Linux paths on whatever operating system this code is compiled and unit-tested on, and the
+    /// separator in that namespace is always <c>/</c>. <c>Path.Combine</c>
+    /// would inject the host's separator, which is <c>/</c> on Linux only by accident — the tests that
+    /// exercise this class on a Windows runner proved that by reporting every path as missing.
+    /// </remarks>
+    private static string Join(string left, string right) => left.TrimEnd('/') + '/' + right;
+
     /// <summary>Slice holding processes that must bypass the tunnel.</summary>
     public const string BypassSliceName = "myvpn-bypass.slice";
 
@@ -178,7 +190,7 @@ public sealed class CgroupV2Manager
                 + "required for 'socket cgroupv2' matching; this host is using cgroup v1 or has none."));
         }
 
-        if (!_fileSystem.FileExists(Path.Combine(root, ControllersFileName)))
+        if (!_fileSystem.FileExists(Join(root, ControllersFileName)))
         {
             return Result<CgroupV2Mount>.Fail(new MyVpnError(
                 ErrorCodes.ProcessRoutingUnsupported,
@@ -214,8 +226,8 @@ public sealed class CgroupV2Manager
             return Result<CgroupSlice>.Fail(relative.Error!);
         }
 
-        var full = Path.Combine(mount.Value.Root, relative.Value);
-        var procs = Path.Combine(full, ProcsFileName);
+        var full = Join(mount.Value.Root, relative.Value);
+        var procs = Join(full, ProcsFileName);
 
         if (_fileSystem.DirectoryExists(full) && _fileSystem.FileExists(procs))
         {
@@ -275,7 +287,7 @@ public sealed class CgroupV2Manager
             return Result<int>.Fail(relative.Error!);
         }
 
-        var procs = Path.Combine(mount.Value.Root, relative.Value, ProcsFileName);
+        var procs = Join(Join(mount.Value.Root, relative.Value), ProcsFileName);
         if (!_fileSystem.FileExists(procs))
         {
             return Result<int>.Fail(JoinFailed(relative.Value, $"'{procs}' does not exist"));
@@ -323,7 +335,7 @@ public sealed class CgroupV2Manager
             return Result<IReadOnlyList<int>>.Fail(relative.Error!);
         }
 
-        var procs = Path.Combine(mount.Value.Root, relative.Value, ProcsFileName);
+        var procs = Join(Join(mount.Value.Root, relative.Value), ProcsFileName);
         if (!_fileSystem.FileExists(procs))
         {
             return Result<IReadOnlyList<int>>.Ok(Array.Empty<int>());
@@ -396,7 +408,7 @@ public sealed class CgroupV2Manager
             return Result.Fail(relative.Error!);
         }
 
-        var full = Path.Combine(mount.Value.Root, relative.Value);
+        var full = Join(mount.Value.Root, relative.Value);
 
         if (!_fileSystem.DirectoryExists(full))
         {
@@ -515,7 +527,7 @@ public sealed class CgroupV2Manager
             return Result<int>.Ok(0);
         }
 
-        var rootProcs = Path.Combine(mount.Root, ProcsFileName);
+        var rootProcs = Join(mount.Root, ProcsFileName);
         var released = 0;
 
         foreach (var pid in members.Value)

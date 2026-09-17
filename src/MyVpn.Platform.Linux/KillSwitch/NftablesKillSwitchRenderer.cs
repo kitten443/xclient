@@ -66,6 +66,19 @@ public static class NftablesKillSwitchRenderer
     /// <summary>
     /// Renders the full ruleset that installs the Kill Switch.
     /// </summary>
+    /// <summary>
+    /// Finalises a rendered ruleset.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="StringBuilder.AppendLine()"/> emits <see cref="Environment.NewLine"/>, which is
+    /// <c>\r\n</c> on Windows. A ruleset is a file for nft — a Linux tool — not text for the host
+    /// that happened to render it: its separator is <c>\n</c> on every operating system this code
+    /// is compiled or unit-tested on, so the host's convention must not leak into the file. On
+    /// Linux the replace is a no-op, which is what keeps the Linux assertions byte-identical.
+    /// </remarks>
+    private static string Finish(StringBuilder builder) =>
+        builder.Replace(Environment.NewLine, "\n").ToString();
+
     public static string RenderInstall(KillSwitchPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -93,7 +106,7 @@ public static class NftablesKillSwitchRenderer
         AppendForwardChain(builder);
 
         builder.AppendLine("}");
-        return builder.ToString();
+        return Finish(builder);
     }
 
     /// <summary>Renders the removal script; safe to run when nothing is installed.</summary>
@@ -103,7 +116,7 @@ public static class NftablesKillSwitchRenderer
         builder.AppendLine("# MyVpn Kill Switch — teardown, idempotent.");
         builder.AppendLine(CultureInfo.InvariantCulture, $"table inet {TableName}");
         builder.AppendLine(CultureInfo.InvariantCulture, $"delete table inet {TableName}");
-        return builder.ToString();
+        return Finish(builder);
     }
 
     /// <summary>Renders a read-only status query used by verification.</summary>
