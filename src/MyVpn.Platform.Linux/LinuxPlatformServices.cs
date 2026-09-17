@@ -8,6 +8,7 @@ using MyVpn.Platform.Abstractions.Routing;
 using MyVpn.Platform.Linux.Dns;
 using MyVpn.Platform.Linux.KillSwitch;
 using MyVpn.Platform.Linux.Network;
+using MyVpn.Platform.Linux.ProcessRouting;
 using MyVpn.Platform.Linux.Proxy;
 using MyVpn.Platform.Linux.Routing;
 using MyVpn.Platform.Linux.Tun;
@@ -23,10 +24,23 @@ namespace MyVpn.Platform.Linux;
 /// </remarks>
 public sealed class LinuxPlatformServices : IPlatformServices
 {
+    /// <param name="vpnServerEndpoints">
+    /// Resolved server addresses, when the caller already knows them.
+    /// </param>
+    /// <remarks>
+    /// The endpoints are the outermost loop-prevention layer for process routing: an
+    /// <c>ip rule to &lt;server&gt; lookup main</c> that keeps the core's own connection off any
+    /// policy-routed table. They are only known after the profile's server has been resolved, so
+    /// a composition that enables process routing should construct the router once resolution has
+    /// happened rather than expecting the factory to conjure them. Passing <c>null</c> is
+    /// supported and leaves the remaining two layers in force — the core is never moved into a
+    /// routed slice, and the rendered rules <c>return</c> for traffic leaving via the tunnel.
+    /// </remarks>
     public LinuxPlatformServices(
         ICommandRunner? runner = null,
         string tunnelInterfaceName = "myvpn0",
-        string killSwitchIdentifier = "myvpn_ks")
+        string killSwitchIdentifier = "myvpn_ks",
+        IReadOnlyList<string>? vpnServerEndpoints = null)
     {
         var shared = runner ?? new ProcessCommandRunner();
 
@@ -35,7 +49,13 @@ public sealed class LinuxPlatformServices : IPlatformServices
         Dns = new LinuxDnsConfigurator(shared);
         SystemProxy = new LinuxSystemProxy(shared);
         Tun = new LinuxTunDeviceManager(shared);
-        ProcessRouter = new LinuxProcessRouter();
+        // CgroupV2ProcessRouter, not the stub: the stub refuses every plan, which would look
+        // like a working feature that silently never applies. The stub was removed rather than
+        // left beside this one, because two similarly named routers is a footgun.
+        ProcessRouter = new CgroupV2ProcessRouter(
+            shared,
+            tunnelInterface: tunnelInterfaceName,
+            vpnServerEndpoints: vpnServerEndpoints);
         PrivilegedHost = new UnavailablePrivilegedHost();
 
         NetworkState = new LinuxNetworkStateManager(
@@ -110,19 +130,4 @@ public sealed class LinuxPlatformServices : IPlatformServices
         "/usr/bin",
         "/opt/xray",
     };
-}
-
-/// <summary>
-/// Linux process routing.
-/// </summary>
-/// <remarks>
-/// Enumeration is real. Enforcement is not implemented, and the capability value states what the
-/// platform permits rather than what this build does — cgroups v2 with an nftables
-/// <c>socket cgroupv2</c> match and policy routing is the documented path (ADR-0007).
-/// </remarks>
-public sealed class LinuxProcessRouter : ProcessRouterBase
-{
-    public LinuxProcessRouter() : base(ProcessRoutingCapability.FullRedirect)
-    {
-    }
 }
