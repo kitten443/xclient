@@ -356,8 +356,10 @@ Full detail: [`NOTICE`](NOTICE) and
   (v2rayN architecture, issue #9765 geo data, the Xray TUN inbound, the NAT/UDP
   matrix, Happ headers, and Windows/Linux/macOS networking).
 * [`NOTICE`](NOTICE), [`LICENSE`](LICENSE).
-* [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — a five-runner build/test
-  matrix (`windows-x64`, `linux-x64`, `linux-arm64`, `macos-intel`,
-  `macos-apple-silicon`), full-solution build, static analysis, CodeQL, dependency and
-  secret scanning, licence inventory, the localization and clean-room provenance guards,
-  packaging, and conditional signing.
+* [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — a four-runner build/test
+  matrix (`windows-x64`, `linux-x64`, `linux-arm64`, `macos-apple-silicon`), plus an
+  on-demand `macos-intel` leg on `macos-15-intel` (GitHub is retiring the `macos-13`
+  image and its remaining Intel capacity is queue-starved, so Intel verification runs
+  on request rather than holding the pipeline), full-solution build, static analysis,
+  CodeQL, dependency and secret scanning, licence inventory, the localization and
+  clean-room provenance guards, packaging, and conditional signing.

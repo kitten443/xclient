@@ -107,10 +107,6 @@ jobs:
             os: ubuntu-24.04-arm
             rid: linux-arm64
             test_filter: 'Category!=RequiresRoot'
-          - name: macos-intel
-            os: macos-13
-            rid: osx-x64
-            test_filter: ''
           - name: macos-apple-silicon
             os: macos-14
             rid: osx-arm64
@@ -179,9 +175,69 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
+  # 1b. MACOS INTEL — on demand only
+  # ===========================================================================
+  # This leg used to be part of the `build-test` matrix on `macos-13`. GitHub is
+  # retiring that image (brownouts from November 2025, removal announced in the
+  # 2025-09-19 changelog), and its remaining capacity is starved: the job sat in
+  # the queue across every run and never started, which held the whole matrix —
+  # and therefore `packaging` — hostage. Apple has also discontinued the x86_64
+  # architecture, and GitHub drops Intel macOS support entirely when the macOS 15
+  # image retires (announced for Fall 2027).
+  #
+  # So Intel verification still exists, but on request: run this workflow with
+  # "Run workflow" to get a real `macos-15-intel` runner. Nothing in the
+  # blocking path (`packaging`, `signing`) may depend on this job.
+  # ===========================================================================
+  build-test-macos-intel:
+    name: Build & test (macos-intel, on demand)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        shell: bash
+        run: dotnet restore MyVpn.sln
+
+      - name: Build
+        shell: bash
+        run: dotnet build MyVpn.sln -c "$CONFIGURATION" --no-restore
+
+      - name: Unit tests (Core, Infrastructure, Platform)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in \
+            tests/MyVpn.Core.Tests/MyVpn.Core.Tests.csproj \
+            tests/MyVpn.Infrastructure.Tests/MyVpn.Infrastructure.Tests.csproj \
+            tests/MyVpn.Platform.Tests/MyVpn.Platform.Tests.csproj
+          do
+            echo "::group::dotnet test $project"
+            dotnet test "$project" -c "$CONFIGURATION" --no-build
+            echo "::endgroup::"
+          done
+
+      - name: Integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test tests/MyVpn.Integration.Tests/MyVpn.Integration.Tests.csproj \
+            -c "$CONFIGURATION" --no-build
+
+  # ===========================================================================
   # 2. FULL SOLUTION BUILD — fast single-OS gate
   # ===========================================================================
-  # `build-test` already builds the solution on five runners; this job exists to
+  # `build-test` already builds the solution on four runners; this job exists to
   # give one fast, unambiguous "the whole solution compiles" signal on Linux
   # without waiting for the matrix. It is BLOCKING now that the tree builds; it
   # previously carried `continue-on-error` while MyVpn.Service, MyVpn.Cli and
@@ -481,7 +537,8 @@ jobs:
           - { name: win-arm64,    os: windows-latest,   rid: win-arm64,    family: windows, xray_asset: windows-arm64-v8a }
           - { name: linux-x64,    os: ubuntu-latest,    rid: linux-x64,    family: linux,   xray_asset: linux-64 }
           - { name: linux-arm64,  os: ubuntu-24.04-arm, rid: linux-arm64,  family: linux,   xray_asset: linux-arm64-v8a }
-          - { name: osx-x64,      os: macos-13,         rid: osx-x64,      family: macos,   xray_asset: macos-64 }
+          # osx-x64 was removed with the build-test leg: it ran on the retiring, queue-starved
+          # macos-13 image. Intel packaging can return on macos-15-intel when there is demand.
           - { name: osx-arm64,    os: macos-14,         rid: osx-arm64,    family: macos,   xray_asset: macos-arm64-v8a }
     steps:
       - name: Checkout
