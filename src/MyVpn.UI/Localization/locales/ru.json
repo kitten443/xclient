@@ -317,5 +317,8 @@
   "killswitch.reason.vpn_server": "Сервер VPN должен оставаться доступным, иначе туннель не подключится.",
   "killswitch.reason.resolver": "DNS-серверы должны оставаться доступными, чтобы имена разрешались.",
   "killswitch.reason.user_exemption": "Вы добавили этот адрес как исключение.",
-  "error.dns.leak_detected": "DNS-запросы могут уходить мимо туннеля."
+  "error.dns.leak_detected": "DNS-запросы могут уходить мимо туннеля.",
+  "route.reason.vpn_server": "Сервер VPN должен оставаться доступным напрямую, иначе туннель невозможно установить.",
+  "route.reason.default_v4": "Весь IPv4-трафик направляется через туннель.",
+  "route.reason.default_v6": "Весь IPv6-трафик направляется через туннель."
 }

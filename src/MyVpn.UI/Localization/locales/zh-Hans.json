@@ -317,5 +317,8 @@
   "killswitch.reason.vpn_server": "VPN 服务器必须保持可达，否则隧道无法连接。",
   "killswitch.reason.resolver": "DNS 服务器必须保持可达，才能解析域名。",
   "killswitch.reason.user_exemption": "你将该地址添加为例外。",
-  "error.dns.leak_detected": "DNS 查询可能正在泄漏到隧道之外。"
+  "error.dns.leak_detected": "DNS 查询可能正在泄漏到隧道之外。",
+  "route.reason.vpn_server": "VPN 服务器必须保持直连可达，否则无法建立隧道。",
+  "route.reason.default_v4": "所有 IPv4 流量都经由隧道。",
+  "route.reason.default_v6": "所有 IPv6 流量都经由隧道。"
 }

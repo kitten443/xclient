@@ -400,5 +400,8 @@
   "header.web_page_url": "Web page url",
   "header.web_page_url.desc": "Applies this provider setting: web page url.",
   "header.xray_tun_enable": "Xray tun enable",
-  "header.xray_tun_mtu": "Xray tun mtu"
+  "header.xray_tun_mtu": "Xray tun mtu",
+  "route.reason.vpn_server": "The VPN server must stay reachable directly, or the tunnel could never be established.",
+  "route.reason.default_v4": "All IPv4 traffic is routed through the tunnel.",
+  "route.reason.default_v6": "All IPv6 traffic is routed through the tunnel."
 }
